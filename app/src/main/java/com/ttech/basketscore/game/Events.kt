@@ -48,6 +48,10 @@ data class Shot(
     val assistId: String? = null,
     /** ブロックした相手の選手 */
     val blockId: String? = null,
+    /** オフェンスの種別（セット・速攻など。F-408） */
+    val offenseType: String? = null,
+    /** 相手のディフェンスの種別（マンツーマン・ゾーンなど。F-408） */
+    val defenseType: String? = null,
 ) : GameEvent
 
 /** ファウルの記号（JBA の TO マニュアル） */
@@ -149,6 +153,10 @@ data class Turnover(
     val type: String? = null,
     /** スティールした相手の選手 */
     val stealById: String? = null,
+    /** オフェンスの種別（F-408） */
+    val offenseType: String? = null,
+    /** 相手のディフェンスの種別（F-408） */
+    val defenseType: String? = null,
 ) : GameEvent
 
 @Serializable

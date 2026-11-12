@@ -297,8 +297,8 @@ class RecordViewModel(
 
     fun score(side: Side, playerId: String, kind: ShotKind) = add(Shot(period, null, side, playerId, kind, made = true))
 
-    fun foul(side: Side, playerId: String?, code: FoulCode, freeThrows: Int, cancelled: Boolean, offensive: Boolean) = add(
-        Foul(
+    fun foul(side: Side, playerId: String?, code: FoulCode, freeThrows: Int, cancelled: Boolean, offensive: Boolean) {
+        val foul = Foul(
             period = period,
             side = side,
             offender = if (playerId == null) Offender.HEAD_COACH else Offender.PLAYER,
@@ -307,8 +307,26 @@ class RecordViewModel(
             freeThrows = freeThrows,
             cancelled = cancelled,
             offensive = offensive,
-        ),
-    )
+        )
+        add(foul)
+        // スタッツのときは、フリースローを続けて聞く（F-402）
+        if (current?.setup?.recordsStats == true) stats.afterFoul(foul)
+    }
+
+    // --- スタッツ（6 段目） ---
+
+    /** スタッツの入力（シュートの位置・続けて聞くこと） */
+    val stats = StatsInput(this)
+
+    /** ミニボックススコアを出すか（F-410） */
+    var showBox by mutableStateOf(false)
+
+    /** 後半に画面の左右のチームも入れ替えるか（F-409） */
+    fun setSwapPanels(swap: Boolean) {
+        val g = current ?: return
+        if (g.setup.swapPanelsSecondHalf == swap) return
+        viewModelScope.launch { repo.updateSetup(gameId, g.setup.copy(swapPanelsSecondHalf = swap)) }
+    }
 
     fun timeout(side: Side, minute: Int?) = add(Timeout(period, null, side, minute))
 

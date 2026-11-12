@@ -178,7 +178,7 @@ fun SubstitutionDialog(setup: GameSetup, state: GameState, onDismiss: () -> Unit
 
 /** 前半の終わりの照合（F-311）: 選手とコーチのファウルの数、合計得点 */
 @Composable
-fun HalfTimeDialog(setup: GameSetup, state: GameState, onDismiss: () -> Unit) {
+fun HalfTimeDialog(setup: GameSetup, state: GameState, onDismiss: () -> Unit, onSwapPanels: ((Boolean) -> Unit)? = null) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("前半の照合") },
@@ -194,6 +194,15 @@ fun HalfTimeDialog(setup: GameSetup, state: GameState, onDismiss: () -> Unit) {
                     if (team.coachFouls.isNotEmpty()) Text("コーチ　${team.coachFouls.joinToString(" ") { it.text }}")
                 }
                 state.arrow?.let { Text("アロー: ${EventText.teamLabel(setup, it)}") }
+                // サイドチェンジ（F-409）: コートの攻める向きは必ず入れ替わる。画面の左右のチームも入れ替えるかを選ぶ
+                onSwapPanels?.let { swap ->
+                    HorizontalDivider()
+                    Text("後半のサイドチェンジ", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !setup.swapPanelsSecondHalf, onClick = { swap(false) }, label = { Text("ベンチ固定（攻める向きだけ）") })
+                        FilterChip(selected = setup.swapPanelsSecondHalf, onClick = { swap(true) }, label = { Text("ベンチごと入れ替え") })
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("確認しました") } },
