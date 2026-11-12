@@ -103,8 +103,16 @@ data class GameSetup(
     val usePracticeNumbers: Boolean = false,
     /** 前半に、相手のベンチ側のゴールを攻めるか（false なら自分のベンチ側を攻める） */
     val attackOpponentBenchFirstHalf: Boolean = true,
+    /** 後半に、画面の左右のチームも入れ替えるか（false ならベンチ固定で、コートの攻める向きだけを入れ替える。F-409） */
+    val swapPanelsSecondHalf: Boolean = false,
     val teamA: TeamSetup,
     val teamB: TeamSetup,
 ) {
     fun team(side: Side): TeamSetup = if (side == Side.A) teamA else teamB
+
+    /** スタッツを記録するか（詳しさが「公式」でなければ） */
+    val recordsStats: Boolean get() = detail != DetailLevel.OFFICIAL
+
+    /** プレーの種別を記録するか */
+    val recordsTypes: Boolean get() = detail == DetailLevel.STATS_WITH_TYPES
 }

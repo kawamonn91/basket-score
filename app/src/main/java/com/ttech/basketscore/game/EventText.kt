@@ -20,6 +20,8 @@ object EventText {
         is Shot -> buildString {
             append("${teamLabel(setup, event.side)} ${number(setup, event.side, event.playerId)} ${event.kind.label} ")
             append(if (event.made) "成功" else "失敗")
+            listOfNotNull(event.shotType, event.offenseType, event.defenseType?.let { "相手 $it" })
+                .takeIf { it.isNotEmpty() }?.let { append("（${it.joinToString("・")}）") }
             event.assistId?.let { append("（AST ${number(setup, event.side, it)}）") }
             event.blockId?.let { append("（BLK ${number(setup, event.side.other, it)}）") }
         }

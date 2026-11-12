@@ -65,6 +65,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ttech.basketscore.data.LoadedGame
 import com.ttech.basketscore.data.StoredEvent
 import com.ttech.basketscore.game.ClockFormat
+import com.ttech.basketscore.stats.BoxScore
+import com.ttech.basketscore.stats.Possession
+import com.ttech.basketscore.stats.Possessions
+import com.ttech.basketscore.stats.Sides
+import com.ttech.basketscore.stats.TeamBox
 import com.ttech.basketscore.game.EventText
 import com.ttech.basketscore.game.GameSetup
 import com.ttech.basketscore.game.GameState
@@ -127,7 +132,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
     val g = game ?: return
     val setup = g.setup
     val state = g.state
-    val left = if (setup.teamA.benchLeft) Side.A else Side.B
+    val left = Sides.leftPanel(setup, state.period)
     val right = left.other
 
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -163,10 +168,24 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
             )
             Banner(vm.banner, onDismiss = vm::dismissBanner)
             message?.let { Banner(listOf(it), onDismiss = { message = null }) }
+            // 選手のボタン: シュートの入力中や、続けて聞いているときは、その答えにする
+            val onSelect: (Selection) -> Unit = { sel ->
+                if (!(setup.recordsStats && state.periodRunning && vm.stats.tapPlayer(sel.side, sel.playerId))) vm.selected = sel
+            }
+            val box = if (vm.showBox) {
+                remember(g.events, clockSecond) {
+                    BoxScore.compute(setup, g.events.map { it.event }, state, clockSecond.takeIf { it != Long.MAX_VALUE })
+                }
+            } else {
+                null
+            }
             Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TeamPanel(
                     g, left, vm.selected, clockSecond,
-                    onSelect = { vm.selected = it },
+                    box = box?.get(left),
+                    onSelect = onSelect,
+                    onTeamRebound = { vm.stats.rebound(left, null) },
+                    onTeamTurnover = { vm.stats.startTurnover(left, null) },
                     onTimeout = { if (vm.usesClock) vm.timeout(left, null) else dialog = Dialog.TimeoutMinute(left) },
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(left, null) },
@@ -176,6 +195,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                 )
                 CenterPanel(
                     g, vm.selected,
+                    stats = vm.stats.takeIf { setup.recordsStats },
                     onStart = { dialog = Dialog.JumpBall },
                     onNextPeriod = vm::nextPeriod,
                     onEndGame = { dialog = Dialog.EndGame },
@@ -188,7 +208,10 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                 )
                 TeamPanel(
                     g, right, vm.selected, clockSecond,
-                    onSelect = { vm.selected = it },
+                    box = box?.get(right),
+                    onSelect = onSelect,
+                    onTeamRebound = { vm.stats.rebound(right, null) },
+                    onTeamTurnover = { vm.stats.startTurnover(right, null) },
                     onTimeout = { if (vm.usesClock) vm.timeout(right, null) else dialog = Dialog.TimeoutMinute(right) },
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(right, null) },
@@ -200,7 +223,13 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
         }
     }
 
-    if (vm.halfTimeCheck) HalfTimeDialog(setup, state, onDismiss = { vm.halfTimeCheck = false })
+    if (vm.halfTimeCheck) {
+        HalfTimeDialog(
+            setup, state,
+            onDismiss = { vm.halfTimeCheck = false },
+            onSwapPanels = vm::setSwapPanels.takeIf { setup.recordsStats },
+        )
+    }
 
     when (val b = vm.buzzer) {
         null -> Unit
@@ -376,7 +405,13 @@ private fun Scoreboard(
                 )
             }
             ScoreSide(setup, state, left, clockSecond, Modifier.weight(1f))
-            ArrowView(setup, state, left, onFlipArrow)
+            val possession = if (setup.recordsStats) remember(g.events) { Possessions.current(g.events.map { it.event }) } else null
+            ArrowView(
+                setup, state, left, onFlipArrow,
+                possession = possession,
+                clock = clockSecond.takeIf { it != Long.MAX_VALUE },
+                onFlipPossession = { possession?.let { vm.stats.possession(it.side.other) } },
+            )
             ScoreSide(setup, state, left.other, clockSecond, Modifier.weight(1f), alignEnd = true)
             IconButton(onClick = onUndo, enabled = g.events.isNotEmpty()) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "元に戻す") }
             IconButton(onClick = onSheet) { Icon(Icons.Filled.Description, contentDescription = "スコアシート") }
@@ -386,6 +421,10 @@ private fun Scoreboard(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("スコアシート（PDF・印刷）") }, onClick = { menu = false; onSheet() })
                     DropdownMenuItem(text = { Text("記録の一覧（Play by Play）") }, onClick = { menu = false; onList() })
+                    DropdownMenuItem(
+                        text = { Text(if (vm.showBox) "ボックススコアを隠す" else "ボックススコアを出す") },
+                        onClick = { menu = false; vm.showBox = !vm.showBox },
+                    )
                     DropdownMenuItem(text = { Text("ジャンプボールシチュエーション（アローを反転）") }, enabled = state.arrow != null, onClick = { menu = false; onFlipArrow() })
                     DropdownMenuItem(text = { Text("${Period.label(state.period.coerceAtLeast(1))} を終える") }, enabled = state.periodRunning, onClick = { menu = false; onEndPeriod() })
                     DropdownMenuItem(text = { Text("試合を終える") }, enabled = state.period >= 1 && !state.finished, onClick = { menu = false; onEndGame() })
@@ -399,13 +438,6 @@ private fun Scoreboard(
 private fun ScoreSide(setup: GameSetup, state: GameState, side: Side, clock: Long, modifier: Modifier, alignEnd: Boolean = false) {
     val team = state.team(side)
     val penalty = state.period >= 1 && state.inPenalty(side)
-    val used = team.timeouts.count { mark ->
-        when {
-            Period.isOvertime(state.period) -> mark.period == state.period
-            state.period <= 2 -> mark.period <= 2
-            else -> mark.period in 3..4
-        }
-    }
     Row(
         modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -422,9 +454,10 @@ private fun ScoreSide(setup: GameSetup, state: GameState, side: Side, clock: Lon
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // タイムアウトは取れる残りの数（使った数はスコアシートで見る）
             Text(
                 "TF ${team.teamFoulsIn(state.period.coerceAtLeast(1))}" + (if (penalty) "（罰則）" else "") +
-                    "　TO 残り ${state.timeoutsAvailable(side, clock)}（使用 $used）",
+                    "　TO 残り ${state.timeoutsAvailable(side, clock)}",
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 softWrap = false,
@@ -442,17 +475,41 @@ private fun ScoreNumber(score: Int) {
 
 /** ポゼッションアロー。押すとジャンプボールシチュエーションとして反転する */
 @Composable
-private fun ArrowView(setup: GameSetup, state: GameState, left: Side, onFlip: () -> Unit) {
+private fun ArrowView(
+    setup: GameSetup,
+    state: GameState,
+    left: Side,
+    onFlip: () -> Unit,
+    possession: Possession? = null,
+    clock: Long? = null,
+    onFlipPossession: () -> Unit = {},
+) {
     val arrow = state.arrow
-    Column(
-        Modifier.width(120.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = arrow != null, onClick = onFlip).padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("アロー", style = MaterialTheme.typography.labelSmall)
-        when (arrow) {
-            null -> Text("—")
-            left -> Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "アロー ${EventText.teamLabel(setup, arrow)}", tint = teamColor(setup, arrow), modifier = Modifier.size(36.dp))
-            else -> Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "アロー ${EventText.teamLabel(setup, arrow)}", tint = teamColor(setup, arrow), modifier = Modifier.size(36.dp))
+    Column(Modifier.width(132.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = arrow != null, onClick = onFlip).padding(horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("アロー", style = MaterialTheme.typography.labelSmall)
+            when (arrow) {
+                null -> Text("—")
+                left -> Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "アロー ${EventText.teamLabel(setup, arrow)}", tint = teamColor(setup, arrow), modifier = Modifier.size(32.dp))
+                else -> Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "アロー ${EventText.teamLabel(setup, arrow)}", tint = teamColor(setup, arrow), modifier = Modifier.size(32.dp))
+            }
+        }
+        // 攻めているチームと攻撃時間（F-411・F-505）。押すと攻守を入れ替える
+        possession?.let { p ->
+            val time = p.duration(clock)?.let { " " + ClockFormat.stamp(it).substringBefore('.') } ?: ""
+            // 攻めるゴールの向きに矢印を付ける
+            val right = Sides.attacksRight(setup, p.side, state.period.coerceAtLeast(1))
+            Text(
+                (if (right) "" else "◀ ") + "攻撃 ${EventText.teamLabel(setup, p.side)}$time" + (if (right) " ▶" else ""),
+                style = MaterialTheme.typography.labelMedium,
+                color = teamColor(setup, p.side),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onFlipPossession).padding(horizontal = 4.dp),
+            )
         }
     }
 }
@@ -463,7 +520,10 @@ private fun TeamPanel(
     side: Side,
     selected: Selection?,
     clock: Long,
+    box: TeamBox?,
     onSelect: (Selection) -> Unit,
+    onTeamRebound: () -> Unit,
+    onTeamTurnover: () -> Unit,
     onTimeout: () -> Unit,
     onSubstitution: () -> Unit,
     onCoachFoul: () -> Unit,
@@ -515,7 +575,12 @@ private fun TeamPanel(
                 onClick = { onSelect(Selection(side, RosterPlayer.UNKNOWN)) },
                 enabled = active,
             ) { Text("？") }
+            if (setup.recordsStats) {
+                FilledTonalButton(onClick = onTeamRebound, enabled = state.periodRunning) { Text("チーム REB") }
+                FilledTonalButton(onClick = onTeamTurnover, enabled = state.periodRunning) { Text("チーム TO") }
+            }
         }
+        box?.let { MiniBox(g, side, it) }
         HorizontalDivider()
         Text("直近のプレー（押すと直せる）", style = MaterialTheme.typography.labelMedium)
         val indexed = g.events.withIndex().map { IndexedValue(it.index, it.value.event) }
@@ -560,6 +625,7 @@ private fun PlayerButton(number: String, name: String, fouls: Int, out: Boolean,
 private fun CenterPanel(
     g: LoadedGame,
     selected: Selection?,
+    stats: StatsInput?,
     onStart: () -> Unit,
     onNextPeriod: () -> Unit,
     onEndGame: () -> Unit,
@@ -576,7 +642,7 @@ private fun CenterPanel(
         Column(
             Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(12.dp, if (stats != null && state.periodRunning) Alignment.Top else Alignment.CenterVertically),
         ) {
             when {
                 state.finished -> {
@@ -602,6 +668,12 @@ private fun CenterPanel(
                         Button(onClick = onEndGame, modifier = Modifier.height(56.dp)) { Text("試合を終える", fontSize = 20.sp) }
                     }
                 }
+                stats != null -> StatsCenter(
+                    g, stats, selected,
+                    onScore = onScore,
+                    onFoul = onFoul,
+                    onCancelSelection = onCancel,
+                )
                 selected != null -> {
                     val label = if (selected.playerId == RosterPlayer.UNKNOWN) "？（あとで直す）" else
                         EventText.number(setup, selected.side, selected.playerId) + " " + (setup.team(selected.side).player(selected.playerId)?.name ?: "")
