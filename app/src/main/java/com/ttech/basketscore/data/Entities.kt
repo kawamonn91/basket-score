@@ -29,9 +29,13 @@ data class TeamEntity(
 data class PlayerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "team_id") val teamId: Long,
-    /** 背番号（"0"〜"99" と "00"） */
+    /** 公式用の背番号（"0"〜"99" と "00"） */
     val number: String,
     val name: String,
+    /** 練習用の背番号（空なら公式用と同じ） */
+    @ColumnInfo(name = "practice_number", defaultValue = "") val practiceNumber: String = "",
+    /** 既定のスターター（次の試合の準備で、はじめから選んでおく） */
+    @ColumnInfo(name = "default_starter", defaultValue = "0") val defaultStarter: Boolean = false,
     /** 登録番号の下 3 桁 */
     @ColumnInfo(name = "license_no") val licenseNo: String = "",
     val captain: Boolean = false,

@@ -7,10 +7,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import com.ttech.basketscore.data.GameRepository
+import com.ttech.basketscore.data.TeamRepository
 import com.ttech.basketscore.data.TeamWithPlayers
 import com.ttech.basketscore.game.DetailLevel
 import com.ttech.basketscore.game.GameHeader
 import com.ttech.basketscore.game.GameSetup
+import com.ttech.basketscore.game.GameType
 import com.ttech.basketscore.game.Jersey
 import com.ttech.basketscore.game.RosterPlayer
 import com.ttech.basketscore.game.RosterRules
@@ -32,10 +34,15 @@ data class EntryDraft(
     val selected: Boolean = true,
     val starter: Boolean = false,
     val temporary: Boolean = false,
-)
+    /** 練習用の背番号（空なら公式用と同じ） */
+    val practiceNumber: String = "",
+) {
+    /** 名簿の選手の ID（その試合だけの選手は null） */
+    val playerId: Long? get() = key.removePrefix("p").toLongOrNull()?.takeIf { key.startsWith("p") }
+}
 
 /** 試合の準備（docs/design.md の 3.2） */
-class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
+class GameSetupViewModel(private val games: GameRepository, private val teams: TeamRepository) : ViewModel() {
 
     var step by mutableStateOf(0)
 
@@ -48,6 +55,9 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
     var crewChief by mutableStateOf("")
     var umpire1 by mutableStateOf("")
     var umpire2 by mutableStateOf("")
+    var umpire3 by mutableStateOf("")
+    var gameType by mutableStateOf(GameType.PRACTICE)
+    var memo by mutableStateOf("")
     var scorer by mutableStateOf("")
     var assistantScorer by mutableStateOf("")
     var timer by mutableStateOf("")
@@ -60,6 +70,10 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
         private set
     /** チーム A のベンチが記録係から見て左か */
     var benchALeft by mutableStateOf(true)
+    /** 前半に、相手のベンチ側のゴールを攻めるか */
+    var attackOpponentBench by mutableStateOf(true)
+    /** 練習用の背番号を使うか */
+    var usePracticeNumbers by mutableStateOf(false)
 
     // 3. 出場登録とスターター
     val entriesA = mutableStateListOf<EntryDraft>()
@@ -86,7 +100,16 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
         val max = category.defaultRules().maxPlayers
         list.addAll(
             team.sortedPlayers.mapIndexed { index, p ->
-                EntryDraft(key = "p${p.id}", number = p.number, name = p.name, licenseNo = p.licenseNo, captain = p.captain, selected = index < max)
+                EntryDraft(
+                    key = "p${p.id}",
+                    number = p.number,
+                    name = p.name,
+                    licenseNo = p.licenseNo,
+                    captain = p.captain,
+                    selected = index < max,
+                    starter = p.defaultStarter,
+                    practiceNumber = p.practiceNumber,
+                )
             },
         )
     }
@@ -101,6 +124,15 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
         val list = entries(side)
         val e = list[index]
         list[index] = e.copy(starter = !e.starter, selected = true)
+    }
+
+    /** 表に出す背番号（練習用を使う試合なら練習用） */
+    fun shownNumber(e: EntryDraft): String = RosterRules.numberFor(e.number, e.practiceNumber, usePracticeNumbers)
+
+    /** 今のスターターを、そのチームの既定のスターターにする（F-109） */
+    suspend fun saveDefaultStarters(side: Side) {
+        val teamId = teamId(side) ?: return
+        teams.setDefaultStarters(teamId, entries(side).filter { it.starter }.mapNotNull { it.playerId })
     }
 
     fun addTemporary(side: Side, number: String, name: String) {
@@ -123,11 +155,11 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
 
     private fun rosterPlayers(side: Side): List<RosterPlayer> =
         entries(side).filter { it.selected }
-            .sortedBy { Jersey.sortKey(it.number) }
+            .sortedBy { Jersey.sortKey(shownNumber(it)) }
             .mapIndexed { index, e ->
                 RosterPlayer(
                     id = "$side${index + 1}",
-                    number = e.number,
+                    number = shownNumber(e),
                     name = e.name,
                     licenseNo = e.licenseNo,
                     captain = e.captain,
@@ -159,15 +191,20 @@ class GameSetupViewModel(private val games: GameRepository) : ViewModel() {
                 crewChief = crewChief.trim(),
                 umpire1 = umpire1.trim(),
                 umpire2 = umpire2.trim(),
+                umpire3 = umpire3.trim(),
                 scorer = scorer.trim(),
                 assistantScorer = assistantScorer.trim(),
                 timer = timer.trim(),
                 shotClockOperator = shotClockOperator.trim(),
+                gameType = gameType,
+                memo = memo.trim(),
             ),
             category = category,
             rules = category.defaultRules(),
             detail = detail,
             useClock = useClock,
+            usePracticeNumbers = usePracticeNumbers,
+            attackOpponentBenchFirstHalf = attackOpponentBench,
             teamA = teamSetup(Side.A, a),
             teamB = teamSetup(Side.B, b),
         )

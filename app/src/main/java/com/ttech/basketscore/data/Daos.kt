@@ -45,6 +45,9 @@ abstract class TeamDao {
     @Query("DELETE FROM player WHERE team_id = :teamId")
     abstract suspend fun deletePlayers(teamId: Long)
 
+    @Query("UPDATE player SET default_starter = CASE WHEN id IN (:playerIds) THEN 1 ELSE 0 END WHERE team_id = :teamId")
+    abstract suspend fun setDefaultStarters(teamId: Long, playerIds: List<Long>)
+
     /** チームと選手をまとめて保存する（選手は入れ替える） */
     @Transaction
     open suspend fun saveTeam(team: TeamEntity, players: List<PlayerEntity>): Long {

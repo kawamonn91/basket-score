@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ttech.basketscore.data.TeamWithPlayers
 import com.ttech.basketscore.game.DetailLevel
+import com.ttech.basketscore.game.GameType
 import com.ttech.basketscore.game.RosterRules
 import com.ttech.basketscore.game.Side
 import com.ttech.basketscore.graph
@@ -72,7 +73,7 @@ private val STEP_TITLES = listOf("試合の情報", "チーム", "出場登録�
 @Composable
 fun GameSetupScreen(onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Long) -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel { GameSetupViewModel(graph.games) }
+    val vm = viewModel { GameSetupViewModel(graph.games, graph.teams) }
     val teamsFlow = remember { graph.teams.observeTeams() }
     val teamList by teamsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val teams = remember(teamList) { teamList.associateBy { it.team.id } }
@@ -120,7 +121,7 @@ fun GameSetupScreen(onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Lon
                 when (vm.step) {
                     0 -> InfoStep(vm)
                     1 -> TeamStep(vm, teamList, onEditTeams)
-                    2 -> RosterStep(vm)
+                    2 -> RosterStep(vm, onSaveDefault = { side -> scope.launch { vm.saveDefaultStarters(side) } })
                     else -> RulesStep(vm, teams)
                 }
             }
@@ -135,6 +136,17 @@ private fun Field(value: String, onChange: (String) -> Unit, label: String, modi
 
 @Composable
 private fun InfoStep(vm: GameSetupViewModel) {
+    Section("試合の種類") {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            GameType.entries.forEachIndexed { i, t ->
+                SegmentedButton(
+                    selected = vm.gameType == t,
+                    onClick = { vm.gameType = t },
+                    shape = SegmentedButtonDefaults.itemShape(i, GameType.entries.size),
+                ) { Text(t.label) }
+            }
+        }
+    }
     Section("試合（どれも空でもよい）") {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Field(vm.competition, { vm.competition = it }, "大会名", Modifier.weight(2f))
@@ -151,15 +163,21 @@ private fun InfoStep(vm: GameSetupViewModel) {
             Field(vm.crewChief, { vm.crewChief = it }, "クルーチーフ", Modifier.weight(1f))
             Field(vm.umpire1, { vm.umpire1 = it }, "アンパイア 1", Modifier.weight(1f))
             Field(vm.umpire2, { vm.umpire2 = it }, "アンパイア 2", Modifier.weight(1f))
+            Field(vm.umpire3, { vm.umpire3 = it }, "副審 3 人目", Modifier.weight(1f))
         }
     }
     Section("テーブルオフィシャルズ") {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Field(vm.scorer, { vm.scorer = it }, "スコアラー", Modifier.weight(1f))
             Field(vm.assistantScorer, { vm.assistantScorer = it }, "A.スコアラー", Modifier.weight(1f))
-            Field(vm.timer, { vm.timer = it }, "タイマー", Modifier.weight(1f))
-            Field(vm.shotClockOperator, { vm.shotClockOperator = it }, "S.C.オペレーター", Modifier.weight(1f))
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Field(vm.timer, { vm.timer = it }, "タイマー", Modifier.weight(1f))
+            Field(vm.shotClockOperator, { vm.shotClockOperator = it }, "ショットクロックオペレーター", Modifier.weight(1f))
+        }
+    }
+    Section("メモ") {
+        OutlinedTextField(vm.memo, { vm.memo = it }, label = { Text("メモ（任意）") }, minLines = 2, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -197,18 +215,39 @@ private fun TeamStep(vm: GameSetupViewModel, teams: List<TeamWithPlayers>, onEdi
             }
         }
     }
+    Section("前半に攻める向き") {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(selected = vm.attackOpponentBench, onClick = { vm.attackOpponentBench = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
+                Text("相手のベンチ側のゴール")
+            }
+            SegmentedButton(selected = !vm.attackOpponentBench, onClick = { vm.attackOpponentBench = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
+                Text("自分のベンチ側のゴール")
+            }
+        }
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RosterStep(vm: GameSetupViewModel) {
+private fun RosterStep(vm: GameSetupViewModel, onSaveDefault: (Side) -> Unit) {
     Text("出場する選手に印を付け、スターター 5 人を選びます（出場登録は 18 人まで）")
+    Section("使う背番号") {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(selected = !vm.usePracticeNumbers, onClick = { vm.usePracticeNumbers = false }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
+                Text("公式用")
+            }
+            SegmentedButton(selected = vm.usePracticeNumbers, onClick = { vm.usePracticeNumbers = true }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
+                Text("練習用（無い選手は公式用）")
+            }
+        }
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Side.entries.forEach { side -> RosterColumn(vm, side, Modifier.weight(1f)) }
+        Side.entries.forEach { side -> RosterColumn(vm, side, onSaveDefault, Modifier.weight(1f)) }
     }
 }
 
 @Composable
-private fun RosterColumn(vm: GameSetupViewModel, side: Side, modifier: Modifier) {
+private fun RosterColumn(vm: GameSetupViewModel, side: Side, onSaveDefault: (Side) -> Unit, modifier: Modifier) {
     val entries = vm.entries(side)
     val selected = entries.count { it.selected }
     val starters = entries.count { it.starter }
@@ -216,7 +255,7 @@ private fun RosterColumn(vm: GameSetupViewModel, side: Side, modifier: Modifier)
         entries.forEachIndexed { index, e ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = e.selected, onCheckedChange = { vm.toggleSelected(side, index) })
-                Text("#${e.number}", modifier = Modifier.width(48.dp), style = MaterialTheme.typography.titleMedium)
+                Text("#${vm.shownNumber(e)}", modifier = Modifier.width(48.dp), style = MaterialTheme.typography.titleMedium)
                 Text(
                     e.name + (if (e.captain) "（CAP）" else "") + (if (e.temporary) "（この試合だけ）" else ""),
                     modifier = Modifier.weight(1f).clickable { vm.toggleSelected(side, index) },
@@ -224,6 +263,14 @@ private fun RosterColumn(vm: GameSetupViewModel, side: Side, modifier: Modifier)
                 FilterChip(selected = e.starter, onClick = { vm.toggleStarter(side, index) }, label = { Text("スターター") })
             }
         }
+        var saved by remember { mutableStateOf(false) }
+        OutlinedButton(
+            onClick = {
+                onSaveDefault(side)
+                saved = true
+            },
+            enabled = starters == RosterRules.STARTERS && vm.teamId(side) != null,
+        ) { Text(if (saved) "既定のスターターにしました" else "今のスターターを既定にする") }
         HorizontalDivider()
         var number by remember { mutableStateOf("") }
         var name by remember { mutableStateOf("") }

@@ -39,6 +39,9 @@ class TeamRepository(private val db: AppDatabase) {
         )
     }
 
+    /** 既定のスターターを決める（F-109） */
+    suspend fun setDefaultStarters(teamId: Long, playerIds: List<Long>) = dao.setDefaultStarters(teamId, playerIds)
+
     /** チームのコピー（F-105）。名簿ごと複製する */
     suspend fun copy(id: Long): Long? {
         val source = dao.team(id) ?: return null

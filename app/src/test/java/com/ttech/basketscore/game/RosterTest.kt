@@ -26,6 +26,25 @@ class RosterTest {
         )
     }
 
+    @Test
+    fun practiceNumbersAndDefaultStarters() {
+        // 練習用は空なら確かめない。公式用と同じ番号を練習用に使ってもよい
+        assertTrue(RosterRules.teamProblems(listOf("4", "5"), captains = 0, practiceNumbers = listOf("", "4")).isEmpty())
+        assertEquals(
+            listOf("練習用の背番号も 0〜99 か 00 にしてください（123）", "練習用の背番号が重なっています（7）", "既定のスターターは 5 人までにしてください"),
+            RosterRules.teamProblems(listOf("4", "5", "6"), captains = 0, practiceNumbers = listOf("7", "7", "123"), defaultStarters = 6),
+        )
+    }
+
+    @Test
+    fun numberForPicksPracticeOnlyWhenSet() {
+        assertEquals("4", RosterRules.numberFor("4", "23", usePractice = false))
+        assertEquals("23", RosterRules.numberFor("4", "23", usePractice = true))
+        assertEquals("4", RosterRules.numberFor("4", "", usePractice = true))
+        // 0〜99 のどの番号でも使える（00 も）
+        listOf("0", "00", "55", "99").forEach { assertEquals(it, RosterRules.numberFor("1", it, usePractice = true)) }
+    }
+
     private fun player(n: Int, starter: Boolean = false) = RosterPlayer("p$n", n.toString(), "選手$n", starter = starter)
 
     @Test
