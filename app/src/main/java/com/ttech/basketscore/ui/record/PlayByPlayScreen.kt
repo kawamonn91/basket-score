@@ -78,7 +78,7 @@ fun PlayByPlayScreen(gameId: Long, onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${index + 1}", modifier = Modifier.width(48.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(Period.label(e.period), modifier = Modifier.width(56.dp))
+                        Text(com.ttech.basketscore.game.ClockFormat.at(e.period, e.clockMillis), modifier = Modifier.width(110.dp))
                         Box(Modifier.width(8.dp).padding(end = 4.dp).background(side?.let { teamColor(g.setup, it) } ?: MaterialTheme.colorScheme.surface))
                         Text(
                             EventText.describe(g.setup, e) + if (g.state.warnings.containsKey(index)) "（記録が合っていません）" else "",

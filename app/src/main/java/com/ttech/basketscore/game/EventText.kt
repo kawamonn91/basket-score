@@ -30,7 +30,9 @@ object EventText {
             append(FoulMark(event.code, event.freeThrows, event.cancelled, event.period).text)
             if (event.offensive) append("（OF）")
         }
-        is Timeout -> "${teamLabel(setup, event.side)} タイムアウト" + (event.minute?.let { "（${it} 分）" } ?: "")
+        is Timeout -> "${teamLabel(setup, event.side)} タイムアウト" +
+            ((event.minute ?: event.clockMillis?.let { com.ttech.basketscore.rules.Timeouts.sheetMinute(setup.rules.periodMillis(event.period), it) })
+                ?.let { "（${it} 分）" } ?: "")
         is Substitution -> "交代 " + event.changes.joinToString("、") {
             "${teamLabel(setup, it.side)} ${number(setup, it.side, it.outId)}→${number(setup, it.side, it.inId)}"
         }

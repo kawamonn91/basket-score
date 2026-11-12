@@ -59,8 +59,19 @@ data class TeamState(
     /** 失格・退場（GD）した選手 */
     val disqualified: Set<String>,
     val coachDisqualified: Boolean,
+    /** 出場時間（F-504）。コートから出るまでに終わった分の合計（ミリ秒） */
+    val playingMillis: Map<String, Long> = emptyMap(),
+    /** いまコートにいる選手が入ったときの時計の残り（ピリオドの途中だけ） */
+    val onCourtSince: Map<String, Long> = emptyMap(),
 ) {
     fun fouls(playerId: String): List<FoulMark> = playerFouls[playerId].orEmpty()
+
+    /** 出場時間（ミリ秒）。[clock] は今の時計の残り（コートにいる分も足す） */
+    fun playingTime(playerId: String, clock: Long?): Long {
+        val done = playingMillis[playerId] ?: 0
+        val since = onCourtSince[playerId] ?: return done
+        return done + if (clock != null) (since - clock).coerceAtLeast(0) else 0
+    }
 
     fun teamFoulsIn(period: Int): Int = teamFouls[Period.teamFoulPeriod(period)] ?: 0
 

@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ttech.basketscore.data.LoadedGame
 import com.ttech.basketscore.data.StoredEvent
+import com.ttech.basketscore.game.ClockFormat
 import com.ttech.basketscore.game.EventText
 import com.ttech.basketscore.game.GameSetup
 import com.ttech.basketscore.game.GameState
@@ -75,6 +76,15 @@ import com.ttech.basketscore.graph
 import com.ttech.basketscore.rules.Period
 import com.ttech.basketscore.ui.common.NumberGridDialog
 import com.ttech.basketscore.ui.common.toColor
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import kotlinx.coroutines.delay
 
 /** チームの色（決めていなければ A は赤、B は青） */
@@ -91,15 +101,19 @@ private sealed interface Dialog {
     data class AddPlayer(val side: Side) : Dialog
     data object EndGame : Dialog
     data object Exit : Dialog
+    data object Clock : Dialog
 }
 
 /** 記録の画面（docs/design.md の 3.3。いまは公式の記録） */
 @Composable
 fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit, onOpenScoresheet: () -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel(key = "record-$gameId") { RecordViewModel(graph.games, gameId) }
+    val vm = viewModel(key = "record-$gameId") { RecordViewModel(graph.games, gameId, graph.clocks) }
     val game by vm.game.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<Dialog?>(null) }
+    // 出場時間・タイムアウトの残りは 1 秒ごとに数え直せば足りる（画面全体を 50 ミリ秒ごとに描き直さない）
+    val clockSecond by remember { derivedStateOf { vm.clockForRules.let { if (it == Long.MAX_VALUE) it else it / 1000 * 1000 } } }
+    val focus = remember { FocusRequester() }
     var message by remember { mutableStateOf<String?>(null) }
 
     // 試合中は画面を消さない。戻る操作で誤って抜けないように確かめる
@@ -116,11 +130,29 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
     val left = if (setup.teamA.benchLeft) Side.A else Side.B
     val right = left.other
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Surface(
+        Modifier.fillMaxSize()
+            // キーボードのスペースで時計のスタート / ストップ
+            .onPreviewKeyEvent { e ->
+                if (vm.usesClock && e.key == Key.Spacebar && e.type == KeyEventType.KeyDown) {
+                    vm.toggleClock()
+                    true
+                } else {
+                    false
+                }
+            }
+            .focusRequester(focus)
+            .focusable(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Scoreboard(
                 g = g,
                 left = left,
+                vm = vm,
+                clockSecond = clockSecond,
+                onEditClock = { dialog = Dialog.Clock },
                 onBack = { dialog = Dialog.Exit },
                 onUndo = vm::undo,
                 onList = onOpenPlayByPlay,
@@ -133,9 +165,9 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
             message?.let { Banner(listOf(it), onDismiss = { message = null }) }
             Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TeamPanel(
-                    g, left, vm.selected,
+                    g, left, vm.selected, clockSecond,
                     onSelect = { vm.selected = it },
-                    onTimeout = { dialog = Dialog.TimeoutMinute(left) },
+                    onTimeout = { if (vm.usesClock) vm.timeout(left, null) else dialog = Dialog.TimeoutMinute(left) },
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(left, null) },
                     onAddPlayer = { dialog = Dialog.AddPlayer(left) },
@@ -155,9 +187,9 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                     modifier = Modifier.weight(1.3f),
                 )
                 TeamPanel(
-                    g, right, vm.selected,
+                    g, right, vm.selected, clockSecond,
                     onSelect = { vm.selected = it },
-                    onTimeout = { dialog = Dialog.TimeoutMinute(right) },
+                    onTimeout = { if (vm.usesClock) vm.timeout(right, null) else dialog = Dialog.TimeoutMinute(right) },
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(right, null) },
                     onAddPlayer = { dialog = Dialog.AddPlayer(right) },
@@ -169,6 +201,28 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
     }
 
     if (vm.halfTimeCheck) HalfTimeDialog(setup, state, onDismiss = { vm.halfTimeCheck = false })
+
+    when (val b = vm.buzzer) {
+        null -> Unit
+        is Buzzer.NextPeriod -> ConfirmDialog(
+            title = "${Period.label(b.ended)} が終わりました",
+            text = "${Period.label(b.ended)} を終えて、${Period.label(b.next)} に進みます" +
+                if (b.next > Period.QUARTERS) "（同点のため延長）" else "",
+            confirm = "${Period.label(b.next)} へ",
+            onDismiss = { vm.buzzer = null },
+            onConfirm = vm::advanceAfterBuzzer,
+        )
+        is Buzzer.EndGame -> ConfirmDialog(
+            title = "${Period.label(b.ended)} が終わりました",
+            text = "試合を終えて、試合終了の時刻を記録します（あとから記録を直すこともできます）",
+            confirm = "試合を終える",
+            onDismiss = { vm.buzzer = null },
+            onConfirm = {
+                vm.buzzer = null
+                vm.endGame()
+            },
+        )
+    }
 
     when (val d = dialog) {
         null -> Unit
@@ -182,6 +236,25 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                 dialog = null
             },
         )
+        Dialog.Clock -> {
+            val events = g.events.map { it.event }
+            ClockEditDialog(
+                period = state.period.coerceAtLeast(1),
+                current = vm.clockMillis,
+                max = setup.rules.periodMillis(state.period.coerceAtLeast(1)),
+                ended = state.period >= 1 && !state.periodRunning,
+                resumable = !state.finished && com.ttech.basketscore.game.ClockRules.resumableTail(events) != null,
+                onDismiss = { dialog = null },
+                onSet = {
+                    vm.setClock(it)
+                    dialog = null
+                },
+                onResume = {
+                    vm.resumePeriod(it)
+                    dialog = null
+                },
+            )
+        }
         is Dialog.TimeoutMinute -> TimeoutMinuteDialog(
             title = "${EventText.teamLabel(setup, d.side)} のタイムアウト（残り ${state.timeoutsAvailable(d.side, Long.MAX_VALUE)} 回）",
             periodMinutes = (setup.rules.periodMillis(state.period.coerceAtLeast(1)) / 60_000).toInt(),
@@ -262,6 +335,9 @@ private fun Banner(lines: List<String>, onDismiss: () -> Unit) {
 private fun Scoreboard(
     g: LoadedGame,
     left: Side,
+    vm: RecordViewModel,
+    clockSecond: Long,
+    onEditClock: () -> Unit,
     onBack: () -> Unit,
     onUndo: () -> Unit,
     onList: () -> Unit,
@@ -282,15 +358,26 @@ private fun Scoreboard(
                     when {
                         state.finished -> "試合終了"
                         state.period == 0 -> ""
-                        state.periodRunning -> "記録中"
+                        state.periodRunning -> if (vm.clockRunning) "計時中" else "記録中"
                         else -> "休み"
                     },
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
-            ScoreSide(setup, state, left, Modifier.weight(1f))
+            if (vm.usesClock) {
+                ClockPanel(
+                    period = state.period,
+                    clockMillis = { vm.clockMillis },
+                    running = vm.clockRunning,
+                    enabled = state.period >= 1 && !state.finished,
+                    toggleEnabled = state.periodRunning,
+                    onToggle = vm::toggleClock,
+                    onEdit = onEditClock,
+                )
+            }
+            ScoreSide(setup, state, left, clockSecond, Modifier.weight(1f))
             ArrowView(setup, state, left, onFlipArrow)
-            ScoreSide(setup, state, left.other, Modifier.weight(1f), alignEnd = true)
+            ScoreSide(setup, state, left.other, clockSecond, Modifier.weight(1f), alignEnd = true)
             IconButton(onClick = onUndo, enabled = g.events.isNotEmpty()) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "元に戻す") }
             IconButton(onClick = onSheet) { Icon(Icons.Filled.Description, contentDescription = "スコアシート") }
             IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "記録の一覧") }
@@ -309,7 +396,7 @@ private fun Scoreboard(
 }
 
 @Composable
-private fun ScoreSide(setup: GameSetup, state: GameState, side: Side, modifier: Modifier, alignEnd: Boolean = false) {
+private fun ScoreSide(setup: GameSetup, state: GameState, side: Side, clock: Long, modifier: Modifier, alignEnd: Boolean = false) {
     val team = state.team(side)
     val penalty = state.period >= 1 && state.inPenalty(side)
     val used = team.timeouts.count { mark ->
@@ -337,8 +424,10 @@ private fun ScoreSide(setup: GameSetup, state: GameState, side: Side, modifier: 
             }
             Text(
                 "TF ${team.teamFoulsIn(state.period.coerceAtLeast(1))}" + (if (penalty) "（罰則）" else "") +
-                    "　TO 使用 $used・残り ${state.timeoutsAvailable(side, Long.MAX_VALUE)}",
+                    "　TO 残り ${state.timeoutsAvailable(side, clock)}（使用 $used）",
                 style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                softWrap = false,
                 color = if (penalty) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -373,6 +462,7 @@ private fun TeamPanel(
     g: LoadedGame,
     side: Side,
     selected: Selection?,
+    clock: Long,
     onSelect: (Selection) -> Unit,
     onTimeout: () -> Unit,
     onSubstitution: () -> Unit,
@@ -395,6 +485,7 @@ private fun TeamPanel(
                 name = p.name,
                 fouls = team.fouls(id).size,
                 out = team.isOut(id),
+                playing = if (setup.useClock) team.playingTime(id, clock.takeIf { it != Long.MAX_VALUE }) else null,
                 selected = selected == Selection(side, id),
                 color = color,
                 enabled = active,
@@ -431,7 +522,7 @@ private fun TeamPanel(
         Recording.recent(indexed, side).forEach { (i, e) ->
             val stored = g.events[i]
             Text(
-                "${Period.label(e.period)}　${EventText.describe(setup, e)}",
+                "${ClockFormat.at(e.period, e.clockMillis)}　${EventText.describe(setup, e)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (EventText.hasUnknownPlayer(e)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth().clickable { onEdit(stored) }.padding(vertical = 4.dp),
@@ -441,7 +532,7 @@ private fun TeamPanel(
 }
 
 @Composable
-private fun PlayerButton(number: String, name: String, fouls: Int, out: Boolean, selected: Boolean, color: Color, enabled: Boolean, onClick: () -> Unit) {
+private fun PlayerButton(number: String, name: String, fouls: Int, out: Boolean, playing: Long?, selected: Boolean, color: Color, enabled: Boolean, onClick: () -> Unit) {
     val warn = fouls >= 4 || out
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -459,6 +550,8 @@ private fun PlayerButton(number: String, name: String, fouls: Int, out: Boolean,
                     color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // 出場時間（F-504）
+            playing?.let { Text(ClockFormat.stamp(it).substringBefore('.'), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
