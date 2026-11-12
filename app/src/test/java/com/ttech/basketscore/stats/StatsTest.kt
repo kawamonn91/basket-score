@@ -187,7 +187,7 @@ class StatsTest {
         val state = GameEngine.replay(setup, events)
         val box = BoxScore.compute(setup, events, state, ms(7, 0))
         val a4 = box.getValue(Side.A).player("a4")
-        assertEquals(StatLine(pts = 3, fgm = 1, fga = 2, tpm = 1, tpa = 1, or = 1, tov = 1, minutes = ms(3, 0)), a4)
+        assertEquals(StatLine(pts = 3, fgm = 1, fga = 2, tpm = 1, tpa = 1, or = 1, tov = 1, minutes = ms(3, 0), gs = 1, plusMinus = 4, played = true), a4)
         val a5 = box.getValue(Side.A).player("a5")
         assertEquals(1, a5.pts)
         assertEquals(1 to 2, a5.ftm to a5.fta)

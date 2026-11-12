@@ -61,6 +61,8 @@ data class TeamState(
     val coachDisqualified: Boolean,
     /** 出場時間（F-504）。コートから出るまでに終わった分の合計（ミリ秒） */
     val playingMillis: Map<String, Long> = emptyMap(),
+    /** 出場時間のピリオドごとの内訳（コートから出るまでに終わった分） */
+    val playingByPeriod: Map<String, Map<Int, Long>> = emptyMap(),
     /** いまコートにいる選手が入ったときの時計の残り（ピリオドの途中だけ） */
     val onCourtSince: Map<String, Long> = emptyMap(),
 ) {
@@ -77,6 +79,19 @@ data class TeamState(
 
     /** その選手がもう出られないか（5 ファウルか GD） */
     fun isOut(playerId: String): Boolean = playerId in fouledOut || playerId in disqualified
+}
+
+/** 出来事の直前の、コート上の 5 人と得点（[GameEngine.timeline]） */
+data class Snapshot(
+    val index: Int,
+    val period: Int,
+    val periodRunning: Boolean,
+    val onCourtA: List<String>,
+    val onCourtB: List<String>,
+    val scoreA: Int,
+    val scoreB: Int,
+) {
+    fun onCourt(side: Side): List<String> = if (side == Side.A) onCourtA else onCourtB
 }
 
 /** 画面で知らせること（直前の出来事で起きたこと） */

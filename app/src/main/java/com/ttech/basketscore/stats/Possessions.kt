@@ -15,6 +15,30 @@ import com.ttech.basketscore.game.ShotKind
 import com.ttech.basketscore.game.Side
 import com.ttech.basketscore.game.Turnover
 
+/** 攻撃が始まったきっかけ */
+enum class StartReason {
+    /** ピリオドの初め・試合の初めのジャンプボール */
+    PERIOD_START,
+
+    /** ジャンプボールシチュエーション */
+    JUMP_BALL,
+
+    /** 相手の得点（フィールドゴール・最後のフリースロー）のあと */
+    MADE_SHOT,
+
+    /** ディフェンスリバウンド */
+    DEFENSIVE_REBOUND,
+
+    /** 相手のターンオーバー（オフェンスファウルを含む） */
+    TURNOVER,
+
+    /** 手で直した（PossessionChange） */
+    MANUAL,
+
+    /** 記録の食い違いを直した（攻めていないはずのチームの記録） */
+    CORRECTION,
+}
+
 /** 1 回の攻撃（ポゼッション） */
 data class Possession(
     val side: Side,
@@ -28,6 +52,9 @@ data class Possession(
     val endClock: Long?,
     /** この攻撃で取った点 */
     val points: Int,
+    val reason: StartReason = StartReason.CORRECTION,
+    /** オフェンスリバウンドのあとに取った点（セカンドチャンスポイント。F-607） */
+    val secondChancePoints: Int = 0,
 ) {
     /** 攻撃時間（ミリ秒。F-505）。続いている攻撃は [now] までを数える */
     fun duration(now: Long? = null): Long? {
@@ -53,17 +80,23 @@ object Possessions {
         var startClock: Long? = null
         var startPeriod = 0
         var points = 0
+        var reason = StartReason.CORRECTION
+        var secondChance = false
+        var secondChancePoints = 0
         var arrow: Side? = null
         var period = 0
 
-        fun change(newOwner: Side?, index: Int, clock: Long?) {
+        fun change(newOwner: Side?, index: Int, clock: Long?, why: StartReason) {
             if (newOwner == owner) return
-            owner?.let { result += Possession(it, startPeriod, start, index, startClock, clock, points) }
+            owner?.let { result += Possession(it, startPeriod, start, index, startClock, clock, points, reason, secondChancePoints) }
             owner = newOwner
             start = index
             startClock = clock
             startPeriod = period
             points = 0
+            reason = why
+            secondChance = false
+            secondChancePoints = 0
         }
 
         events.forEachIndexed { i, e ->
@@ -73,45 +106,49 @@ object Possessions {
                 is PeriodStart -> {
                     period = e.period
                     if (e.period >= 2) {
-                        change(arrow, i, clock)
+                        change(arrow, i, clock, StartReason.PERIOD_START)
                         arrow = arrow?.other
                     }
                 }
                 is ArrowSet -> {
                     arrow = e.toward
                     // 試合の初めのジャンプボールを取ったチーム（アローの向きの反対）が攻める
-                    change(e.toward.other, i, clock)
+                    change(e.toward.other, i, clock, StartReason.PERIOD_START)
                 }
                 is JumpBallSituation -> {
-                    change(arrow, i, clock)
+                    change(arrow, i, clock, StartReason.JUMP_BALL)
                     arrow = arrow?.other
                 }
                 is Shot -> {
-                    if (owner != e.side) change(e.side, i, clock)
-                    if (e.made) points += e.kind.points
+                    if (owner != e.side) change(e.side, i, clock, StartReason.CORRECTION)
+                    if (e.made) {
+                        points += e.kind.points
+                        if (secondChance) secondChancePoints += e.kind.points
+                    }
                     val ends = e.made && (e.kind != ShotKind.FT || ClockRules.isLastFreeThrow(events.subList(0, i), e))
-                    if (ends) change(e.side.other, i, clock)
+                    if (ends) change(e.side.other, i, clock, StartReason.MADE_SHOT)
                 }
                 is Rebound -> if (e.offensive) {
-                    if (owner != e.side) change(e.side, i, clock)
+                    if (owner != e.side) change(e.side, i, clock, StartReason.CORRECTION)
+                    secondChance = true
                 } else {
-                    change(e.side, i, clock)
+                    change(e.side, i, clock, StartReason.DEFENSIVE_REBOUND)
                 }
                 is Turnover -> {
-                    if (owner != e.side) change(e.side, i, clock)
-                    change(e.side.other, i, clock)
+                    if (owner != e.side) change(e.side, i, clock, StartReason.CORRECTION)
+                    change(e.side.other, i, clock, StartReason.TURNOVER)
                 }
                 is Foul -> if (e.offensive) {
-                    if (owner != e.side) change(e.side, i, clock)
-                    change(e.side.other, i, clock)
+                    if (owner != e.side) change(e.side, i, clock, StartReason.CORRECTION)
+                    change(e.side.other, i, clock, StartReason.TURNOVER)
                 }
-                is PossessionChange -> change(e.side, i, clock)
-                is PeriodEnd -> change(null, i, clock ?: 0)
-                is GameEnd -> change(null, i, clock ?: 0)
+                is PossessionChange -> change(e.side, i, clock, StartReason.MANUAL)
+                is PeriodEnd -> change(null, i, clock ?: 0, StartReason.CORRECTION)
+                is GameEnd -> change(null, i, clock ?: 0, StartReason.CORRECTION)
                 else -> Unit
             }
         }
-        owner?.let { result += Possession(it, startPeriod, start, null, startClock, null, points) }
+        owner?.let { result += Possession(it, startPeriod, start, null, startClock, null, points, reason, secondChancePoints) }
         return result
     }
 
