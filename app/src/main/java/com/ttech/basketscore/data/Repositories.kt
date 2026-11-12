@@ -7,6 +7,8 @@ import com.ttech.basketscore.game.GameSetup
 import com.ttech.basketscore.game.GameState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class TeamRepository(private val db: AppDatabase) {
     private val dao = db.teamDao()
@@ -61,6 +63,9 @@ data class LoadedGame(val entity: GameEntity, val setup: GameSetup, val events: 
 class GameRepository(private val db: AppDatabase) {
     private val dao = db.gameDao()
 
+    /** 出来事の書き込みを 1 本ずつ流す（続けて押しても順番の番号がぶつからないように） */
+    private val writes = Mutex()
+
     fun observeGames(): Flow<List<GameEntity>> = dao.observeGames()
 
     fun observeGame(gameId: Long): Flow<LoadedGame?> =
@@ -87,7 +92,7 @@ class GameRepository(private val db: AppDatabase) {
     suspend fun delete(gameId: Long) = dao.deleteGame(gameId)
 
     /** 出来事を最後に足す */
-    suspend fun addEvent(gameId: Long, event: GameEvent): Long {
+    suspend fun addEvent(gameId: Long, event: GameEvent): Long = writes.withLock {
         val seq = (dao.maxSeq(gameId) ?: 0L) + SEQ_STEP
         val entity = GameEventEntity(
             gameId = gameId,
@@ -100,11 +105,11 @@ class GameRepository(private val db: AppDatabase) {
         val id = dao.insertEvent(entity)
         history(gameId, "追加", null, entity.json)
         refresh(gameId)
-        return id
+        id
     }
 
     /** 出来事を書き換える */
-    suspend fun updateEvent(stored: StoredEvent, event: GameEvent) {
+    suspend fun updateEvent(stored: StoredEvent, event: GameEvent): Unit = writes.withLock {
         val json = GameJson.encodeEvent(event)
         dao.updateEvent(stored.entity.copy(period = event.period, clockMillis = event.clockMillis, json = json))
         history(stored.entity.gameId, "変更", stored.entity.json, json)
@@ -112,10 +117,27 @@ class GameRepository(private val db: AppDatabase) {
     }
 
     /** 出来事を消す（取り消し・削除） */
-    suspend fun deleteEvent(stored: StoredEvent) {
+    suspend fun deleteEvent(stored: StoredEvent): Unit = writes.withLock {
         dao.deleteEvent(stored.entity)
         history(stored.entity.gameId, "削除", stored.entity.json, null)
         refresh(stored.entity.gameId)
+    }
+
+    /** 試合の設定を変える（試合中の選手の追加など）。一覧用の写しも直す */
+    suspend fun updateSetup(gameId: Long, setup: GameSetup) {
+        val game = dao.game(gameId) ?: return
+        val json = GameJson.encodeSetup(setup)
+        dao.updateGame(
+            game.copy(
+                setupJson = json,
+                date = setup.header.date,
+                competition = setup.header.competition,
+                teamAName = setup.teamA.name,
+                teamBName = setup.teamB.name,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+        db.historyDao().insert(EditHistoryEntity(gameId = gameId, at = System.currentTimeMillis(), action = "変更", target = "試合の情報", before = game.setupJson, after = json))
     }
 
     suspend fun setStatus(gameId: Long, status: GameStatus) {

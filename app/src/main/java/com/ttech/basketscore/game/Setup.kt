@@ -31,7 +31,12 @@ data class RosterPlayer(
     val licenseNo: String = "",
     val captain: Boolean = false,
     val starter: Boolean = false,
-)
+) {
+    companion object {
+        /** 誰のプレーか分からないとき（「？」で仮に入力し、あとで直す。F-318） */
+        const val UNKNOWN = "?"
+    }
+}
 
 @Serializable
 data class Staff(val name: String, val licenseNo: String = "")

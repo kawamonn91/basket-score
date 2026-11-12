@@ -6,7 +6,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.ttech.basketscore.ui.game.GameScreen
+import com.ttech.basketscore.ui.record.PlayByPlayScreen
+import com.ttech.basketscore.ui.record.RecordScreen
 import com.ttech.basketscore.ui.setup.GameSetupScreen
 import com.ttech.basketscore.ui.teams.TeamEditScreen
 import com.ttech.basketscore.ui.teams.TeamsScreen
@@ -41,7 +42,15 @@ fun AppNav() {
             )
         }
         composable("game/{gameId}", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
-            GameScreen(gameId = entry.arguments?.getLong("gameId") ?: 0L, onBack = { nav.popBackStack() })
+            val gameId = entry.arguments?.getLong("gameId") ?: 0L
+            RecordScreen(
+                gameId = gameId,
+                onBack = { nav.popBackStack("home", inclusive = false) },
+                onOpenPlayByPlay = { nav.navigate("game/$gameId/pbp") },
+            )
+        }
+        composable("game/{gameId}/pbp", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
+            PlayByPlayScreen(gameId = entry.arguments?.getLong("gameId") ?: 0L, onBack = { nav.popBackStack() })
         }
     }
 }
