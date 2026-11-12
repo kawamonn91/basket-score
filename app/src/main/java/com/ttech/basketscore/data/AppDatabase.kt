@@ -1,6 +1,7 @@
 package com.ttech.basketscore.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -17,8 +18,10 @@ class Converters {
 
 @Database(
     entities = [TeamEntity::class, PlayerEntity::class, GameEntity::class, GameEventEntity::class, EditHistoryEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    // 2: 選手の練習用の背番号と既定のスターター（2026-11-12）
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

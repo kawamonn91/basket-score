@@ -55,6 +55,14 @@ data class TeamSetup(
     fun player(id: String): RosterPlayer? = players.firstOrNull { it.id == id }
 }
 
+/** 試合の種類（集計で絞り込む） */
+@Serializable
+enum class GameType(val label: String) {
+    PRACTICE("練習試合"),
+    OFFICIAL("公式試合"),
+    OTHER("その他"),
+}
+
 /** スコアシートのヘッダー */
 @Serializable
 data class GameHeader(
@@ -68,10 +76,14 @@ data class GameHeader(
     val crewChief: String = "",
     val umpire1: String = "",
     val umpire2: String = "",
+    /** 副審 3 人目（公式の様式には欄が無い。画面と分析の PDF に出す） */
+    val umpire3: String = "",
     val scorer: String = "",
     val assistantScorer: String = "",
     val timer: String = "",
     val shotClockOperator: String = "",
+    val gameType: GameType = GameType.PRACTICE,
+    val memo: String = "",
 )
 
 /** 1 試合の設定（Room の game に JSON で入れる。docs/design.md の 2.2） */
@@ -82,6 +94,10 @@ data class GameSetup(
     val rules: GameRules = category.defaultRules(),
     val detail: DetailLevel = DetailLevel.OFFICIAL,
     val useClock: Boolean = true,
+    /** 練習用の背番号を使うか（出場登録の写しに入る背番号を決める） */
+    val usePracticeNumbers: Boolean = false,
+    /** 前半に、相手のベンチ側のゴールを攻めるか（false なら自分のベンチ側を攻める） */
+    val attackOpponentBenchFirstHalf: Boolean = true,
     val teamA: TeamSetup,
     val teamB: TeamSetup,
 ) {
