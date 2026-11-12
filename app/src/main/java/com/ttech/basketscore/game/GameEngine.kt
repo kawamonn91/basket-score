@@ -18,6 +18,27 @@ object GameEngine {
         return builder.build()
     }
 
+    /**
+     * 出来事ごとの、その出来事の直前のコート上の 5 人と得点（+/-・ラインナップ・ゲームフローに使う）。
+     * 1 回の計算で作るので、出来事が多くても速い
+     */
+    fun timeline(setup: GameSetup, events: List<GameEvent>): List<Snapshot> {
+        val builder = Builder(setup)
+        return events.mapIndexed { index, event ->
+            val before = Snapshot(
+                index = index,
+                period = builder.period,
+                periodRunning = builder.periodRunning,
+                onCourtA = builder.a.onCourt.toList(),
+                onCourtB = builder.b.onCourt.toList(),
+                scoreA = builder.a.score,
+                scoreB = builder.b.score,
+            )
+            builder.apply(index, event)
+            before
+        }
+    }
+
     private class TeamBuilder(val side: Side, val setup: TeamSetup) {
         var score = 0
         val periodPoints = mutableMapOf<Int, Int>()
@@ -33,12 +54,16 @@ object GameEngine {
 
         /** 出場時間（F-504）: 終わった分の合計と、いまコートにいる選手が入ったときの時計の残り */
         val playingMillis = mutableMapOf<String, Long>()
+        val playingByPeriod = mutableMapOf<String, MutableMap<Int, Long>>()
         val onCourtSince = mutableMapOf<String, Long>()
 
         /** コートから出た（交代・失格・ピリオドの終わり）。入ったときと出たときの時計の差を足す */
-        fun leave(playerId: String, clock: Long?) {
+        fun leave(playerId: String, clock: Long?, period: Int) {
             val since = onCourtSince.remove(playerId) ?: return
-            if (clock != null) playingMillis.merge(playerId, (since - clock).coerceAtLeast(0), Long::plus)
+            if (clock == null) return
+            val millis = (since - clock).coerceAtLeast(0)
+            playingMillis.merge(playerId, millis, Long::plus)
+            playingByPeriod.getOrPut(playerId) { mutableMapOf() }.merge(period, millis, Long::plus)
         }
 
         fun build() = TeamState(
@@ -55,6 +80,7 @@ object GameEngine {
             disqualified = disqualified.toSet(),
             coachDisqualified = coachDisqualified,
             playingMillis = playingMillis.toMap(),
+            playingByPeriod = playingByPeriod.mapValues { it.value.toMap() },
             onCourtSince = onCourtSince.toMap(),
         )
     }
@@ -98,7 +124,7 @@ object GameEngine {
                     if (event.period >= 2) arrow = arrow?.other
                 }
                 is PeriodEnd -> {
-                    if (periodRunning) leaveAll(event.clockMillis ?: 0)
+                    if (periodRunning) leaveAll(event.clockMillis ?: 0, event.period)
                     periodRunning = false
                     periodEnds += PeriodEndMark(event.period, a.score, b.score)
                     if (event.period >= Period.QUARTERS) reachedQ4L2m = true
@@ -117,7 +143,7 @@ object GameEngine {
                 is Deflection -> checkOnCourt(index, event.side, event.playerId)
                 is PossessionChange -> Unit
                 is GameEnd -> {
-                    if (periodRunning) leaveAll(event.clockMillis ?: 0)
+                    if (periodRunning) leaveAll(event.clockMillis ?: 0, period)
                     finished = true
                     periodRunning = false
                     endedAt = event.endedAt
@@ -134,8 +160,8 @@ object GameEngine {
             if (period > Period.QUARTERS || (period == Period.QUARTERS && inL2m)) reachedQ4L2m = true
         }
 
-        fun leaveAll(clock: Long) {
-            listOf(a, b).forEach { t -> t.onCourtSince.keys.toList().forEach { t.leave(it, clock) } }
+        fun leaveAll(clock: Long, period: Int) {
+            listOf(a, b).forEach { t -> t.onCourtSince.keys.toList().forEach { t.leave(it, clock, period) } }
         }
 
         fun checkOnCourt(index: Int, side: Side, playerId: String) {
@@ -186,7 +212,7 @@ object GameEngine {
                     } else if (playerId !in team.disqualified && playerDisqualified(marks)) {
                         team.disqualified += playerId
                         team.onCourt.remove(playerId)
-                        team.leave(playerId, foul.clockMillis)
+                        team.leave(playerId, foul.clockMillis, foul.period)
                         alerts += Alert.Disqualified(foul.side, playerId)
                     } else if (playerId !in team.fouledOut && marks.size >= setup.rules.playerFoulLimit) {
                         team.fouledOut += playerId
@@ -246,7 +272,7 @@ object GameEngine {
                 }
                 team.onCourt[outIndex] = change.inId
                 team.entered.putIfAbsent(change.inId, sub.period)
-                team.leave(change.outId, sub.clockMillis)
+                team.leave(change.outId, sub.clockMillis, sub.period)
                 if (setup.useClock && periodRunning && sub.clockMillis != null) team.onCourtSince[change.inId] = sub.clockMillis
             }
         }
