@@ -1,0 +1,21 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+.kotlin/
+
+# リリース署名の鍵（なくすとストアで更新を配れない。README の「署名鍵」を参照）
+*.jks
+*.keystore
+keystore.properties
+
+# 手元だけの参考資料（公式のスコアシートの様式など。作成者の様式なので公開しない）
+reference/
+
+hs_err_pid*.log
+replay_pid*.log
