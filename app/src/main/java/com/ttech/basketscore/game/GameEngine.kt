@@ -117,6 +117,7 @@ object GameEngine {
         }
 
         fun checkOnCourt(index: Int, side: Side, playerId: String) {
+            if (playerId == RosterPlayer.UNKNOWN) return
             val team = team(side)
             if (team.setup.player(playerId) == null) {
                 warn(index, Warning.UnknownPlayer(side, playerId))
@@ -146,7 +147,9 @@ object GameEngine {
                     if (playerId == null) {
                         return
                     }
-                    if (team.setup.player(playerId) == null) warn(index, Warning.UnknownPlayer(foul.side, playerId))
+                    if (playerId != RosterPlayer.UNKNOWN && team.setup.player(playerId) == null) {
+                        warn(index, Warning.UnknownPlayer(foul.side, playerId))
+                    }
                     val marks = team.playerFouls.getOrPut(playerId) { mutableListOf() }
                     marks += mark
                     // 選手のファウルはどの記号もチームファウルに数える（コーチのファウルは数えない）
@@ -156,7 +159,9 @@ object GameEngine {
                     if (!TeamFouls.inPenalty(setup.rules, before) && TeamFouls.inPenalty(setup.rules, before + 1)) {
                         alerts += Alert.TeamFoulPenalty(foul.side, foul.period)
                     }
-                    if (playerId !in team.disqualified && playerDisqualified(marks)) {
+                    if (playerId == RosterPlayer.UNKNOWN) {
+                        // 「？」のファウルは、選手に直すまで退場の判定をしない
+                    } else if (playerId !in team.disqualified && playerDisqualified(marks)) {
                         team.disqualified += playerId
                         team.onCourt.remove(playerId)
                         alerts += Alert.Disqualified(foul.side, playerId)
@@ -175,19 +180,19 @@ object GameEngine {
             }
         }
 
-        /** 選手の失格・退場: T 2 個・U 2 個・T と U が 1 個ずつ、D 1 個 */
+        /** 選手の失格・退場: T 2 個・U 2 個・T と U が 1 個ずつ、D か F 1 個 */
         fun playerDisqualified(marks: List<FoulMark>): Boolean {
             val t = marks.count { it.code == FoulCode.T }
             val u = marks.count { it.code == FoulCode.U }
-            val d = marks.count { it.code == FoulCode.D }
+            val d = marks.count { it.code == FoulCode.D || it.code == FoulCode.F }
             return d >= 1 || t >= 2 || u >= 2 || (t >= 1 && u >= 1)
         }
 
-        /** ヘッドコーチの失格・退場: C 2 個・B 3 個・B 2 個と C 1 個・D 1 個・M 2 個（U15） */
+        /** ヘッドコーチの失格・退場: C 2 個・B 3 個・B 2 個と C 1 個・D か F 1 個・M 2 個（U15） */
         fun coachDisqualified(marks: List<FoulMark>): Boolean {
             val c = marks.count { it.code == FoulCode.C }
             val bench = marks.count { it.code == FoulCode.B }
-            val d = marks.count { it.code == FoulCode.D }
+            val d = marks.count { it.code == FoulCode.D || it.code == FoulCode.F }
             val m = marks.count { it.code == FoulCode.M }
             return d >= 1 || c >= 2 || bench >= 3 || (bench >= 2 && c >= 1) ||
                 (setup.rules.manToManPenalty && m >= 2)

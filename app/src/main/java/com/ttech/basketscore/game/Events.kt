@@ -67,6 +67,8 @@ enum class FoulCode(val label: String) {
     B("B"),
     /** マンツーマンペナルティ（U15。ヘッドコーチに記録する） */
     M("M"),
+    /** ファイティング（乱闘でベンチを離れた。失格・退場） */
+    F("F"),
 }
 
 /** ファウルを記録する相手 */
@@ -89,6 +91,8 @@ data class Foul(
     val cancelled: Boolean = false,
     /** ファウルを受けた選手（スタッツ） */
     val drawnById: String? = null,
+    /** オフェンスファウル（スコアシートには P と書き、スタッツではターンオーバーにも数える） */
+    val offensive: Boolean = false,
 ) : GameEvent
 
 /** タイムアウト。時計を使わないときは、欄に書く分を [minute] に手で入れる */
