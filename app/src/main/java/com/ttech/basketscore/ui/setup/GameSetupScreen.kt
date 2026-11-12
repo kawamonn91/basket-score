@@ -158,7 +158,7 @@ private fun InfoStep(vm: GameSetupViewModel) {
             Field(vm.scorer, { vm.scorer = it }, "スコアラー", Modifier.weight(1f))
             Field(vm.assistantScorer, { vm.assistantScorer = it }, "A.スコアラー", Modifier.weight(1f))
             Field(vm.timer, { vm.timer = it }, "タイマー", Modifier.weight(1f))
-            Field(vm.shotClockOperator, { vm.shotClockOperator = it }, "ショットクロック", Modifier.weight(1f))
+            Field(vm.shotClockOperator, { vm.shotClockOperator = it }, "S.C.オペレーター", Modifier.weight(1f))
         }
     }
 }
@@ -188,7 +188,7 @@ private fun TeamStep(vm: GameSetupViewModel, teams: List<TeamWithPlayers>, onEdi
         }
     }
     Section("ベンチの位置（記録係から見て）") {
-        SingleChoiceSegmentedButtonRow {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             SegmentedButton(selected = vm.benchALeft, onClick = { vm.benchALeft = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
                 Text("A が左・B が右")
             }
