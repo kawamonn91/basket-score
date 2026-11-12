@@ -88,7 +88,7 @@ object GameEngine {
                 }
                 is Shot -> applyShot(index, event)
                 is Foul -> applyFoul(index, event)
-                is Timeout -> applyTimeout(event)
+                is Timeout -> applyTimeout(index, event)
                 is Substitution -> applySubstitution(index, event)
                 is ArrowSet -> arrow = event.toward
                 is JumpBallSituation -> arrow = arrow?.other
@@ -135,12 +135,12 @@ object GameEngine {
             team.score += shot.kind.points
             team.periodPoints.merge(shot.period, shot.kind.points, Int::plus)
             val number = team.setup.player(shot.playerId)?.number ?: "?"
-            runningScore += ScoreMark(shot.side, team.score, shot.playerId, number, shot.kind, shot.period)
+            runningScore += ScoreMark(shot.side, team.score, shot.playerId, number, shot.kind, shot.period, index)
         }
 
         fun applyFoul(index: Int, foul: Foul) {
             val team = team(foul.side)
-            val mark = FoulMark(foul.code, foul.freeThrows, foul.cancelled, foul.period)
+            val mark = FoulMark(foul.code, foul.freeThrows, foul.cancelled, foul.period, index)
             when (foul.offender) {
                 Offender.PLAYER -> {
                     val playerId = foul.playerId
@@ -198,7 +198,7 @@ object GameEngine {
                 (setup.rules.manToManPenalty && m >= 2)
         }
 
-        fun applyTimeout(timeout: Timeout) {
+        fun applyTimeout(index: Int, timeout: Timeout) {
             val team = team(timeout.side)
             val clock = timeout.clockMillis
             val available = Timeouts.available(
@@ -209,7 +209,7 @@ object GameEngine {
             )
             if (available <= 0) alerts += Alert.TimeoutOverLimit(timeout.side)
             val minute = timeout.minute ?: clock?.let { Timeouts.sheetMinute(setup.rules.periodMillis(timeout.period), it) }
-            team.timeouts += TimeoutMark(timeout.period, clock, minute)
+            team.timeouts += TimeoutMark(timeout.period, clock, minute, index)
         }
 
         fun applySubstitution(index: Int, sub: Substitution) {

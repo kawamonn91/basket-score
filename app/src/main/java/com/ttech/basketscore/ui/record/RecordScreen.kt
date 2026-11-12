@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -94,7 +95,7 @@ private sealed interface Dialog {
 
 /** 記録の画面（docs/design.md の 3.3。いまは公式の記録） */
 @Composable
-fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit) {
+fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit, onOpenScoresheet: () -> Unit) {
     val graph = LocalContext.current.graph
     val vm = viewModel(key = "record-$gameId") { RecordViewModel(graph.games, gameId) }
     val game by vm.game.collectAsStateWithLifecycle()
@@ -123,6 +124,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit)
                 onBack = { dialog = Dialog.Exit },
                 onUndo = vm::undo,
                 onList = onOpenPlayByPlay,
+                onSheet = onOpenScoresheet,
                 onFlipArrow = vm::flipArrow,
                 onEndPeriod = vm::endPeriod,
                 onEndGame = { dialog = Dialog.EndGame },
@@ -263,6 +265,7 @@ private fun Scoreboard(
     onBack: () -> Unit,
     onUndo: () -> Unit,
     onList: () -> Unit,
+    onSheet: () -> Unit,
     onFlipArrow: () -> Unit,
     onEndPeriod: () -> Unit,
     onEndGame: () -> Unit,
@@ -289,10 +292,12 @@ private fun Scoreboard(
             ArrowView(setup, state, left, onFlipArrow)
             ScoreSide(setup, state, left.other, Modifier.weight(1f), alignEnd = true)
             IconButton(onClick = onUndo, enabled = g.events.isNotEmpty()) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "元に戻す") }
+            IconButton(onClick = onSheet) { Icon(Icons.Filled.Description, contentDescription = "スコアシート") }
             IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "記録の一覧") }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "メニュー") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("スコアシート（PDF・印刷）") }, onClick = { menu = false; onSheet() })
                     DropdownMenuItem(text = { Text("記録の一覧（Play by Play）") }, onClick = { menu = false; onList() })
                     DropdownMenuItem(text = { Text("ジャンプボールシチュエーション（アローを反転）") }, enabled = state.arrow != null, onClick = { menu = false; onFlipArrow() })
                     DropdownMenuItem(text = { Text("${Period.label(state.period.coerceAtLeast(1))} を終える") }, enabled = state.periodRunning, onClick = { menu = false; onEndPeriod() })

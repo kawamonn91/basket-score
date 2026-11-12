@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ほかのアプリへ渡すファイル（スコアシートや分析の PDF・CSV）。アプリのキャッシュの pdf/ と export/ だけ -->
+<paths>
+    <cache-path name="pdf" path="pdf/" />
+    <cache-path name="export" path="export/" />
+</paths>

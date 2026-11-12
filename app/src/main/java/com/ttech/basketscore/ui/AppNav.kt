@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ttech.basketscore.ui.record.PlayByPlayScreen
 import com.ttech.basketscore.ui.record.RecordScreen
+import com.ttech.basketscore.ui.record.ScoresheetScreen
 import com.ttech.basketscore.ui.setup.GameSetupScreen
 import com.ttech.basketscore.ui.teams.TeamEditScreen
 import com.ttech.basketscore.ui.teams.TeamsScreen
@@ -47,7 +48,11 @@ fun AppNav() {
                 gameId = gameId,
                 onBack = { nav.popBackStack("home", inclusive = false) },
                 onOpenPlayByPlay = { nav.navigate("game/$gameId/pbp") },
+                onOpenScoresheet = { nav.navigate("game/$gameId/sheet") },
             )
+        }
+        composable("game/{gameId}/sheet", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
+            ScoresheetScreen(gameId = entry.arguments?.getLong("gameId") ?: 0L, onBack = { nav.popBackStack() })
         }
         composable("game/{gameId}/pbp", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
             PlayByPlayScreen(gameId = entry.arguments?.getLong("gameId") ?: 0L, onBack = { nav.popBackStack() })

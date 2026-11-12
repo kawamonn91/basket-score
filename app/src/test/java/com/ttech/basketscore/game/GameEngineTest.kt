@@ -50,11 +50,11 @@ class GameEngineTest {
         assertEquals(5, s.b.score)
         assertEquals(
             listOf(
-                ScoreMark(Side.A, 2, "a4", "4", ShotKind.TWO, 1),
-                ScoreMark(Side.B, 3, "b5", "5", ShotKind.THREE, 1),
-                ScoreMark(Side.A, 3, "a6", "6", ShotKind.FT, 1),
-                ScoreMark(Side.A, 4, "a6", "6", ShotKind.FT, 1),
-                ScoreMark(Side.B, 5, "b6", "6", ShotKind.TWO, 2),
+                ScoreMark(Side.A, 2, "a4", "4", ShotKind.TWO, 1, eventIndex = 1),
+                ScoreMark(Side.B, 3, "b5", "5", ShotKind.THREE, 1, eventIndex = 2),
+                ScoreMark(Side.A, 3, "a6", "6", ShotKind.FT, 1, eventIndex = 4),
+                ScoreMark(Side.A, 4, "a6", "6", ShotKind.FT, 1, eventIndex = 5),
+                ScoreMark(Side.B, 5, "b6", "6", ShotKind.TWO, 2, eventIndex = 8),
             ),
             s.runningScore,
         )
