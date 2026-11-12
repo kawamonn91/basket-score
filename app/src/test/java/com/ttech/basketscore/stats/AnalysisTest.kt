@@ -213,7 +213,9 @@ class AnalysisTest {
         val box = BoxScore.compute(setup, events, state)
         val possessions = Possessions.compute(events)
         assertEquals(StartReason.TURNOVER, possessions[2].reason)
-        val adv = Advanced.team(setup, Side.A, box.getValue(Side.A).total, box.getValue(Side.B).total, possessions, 1)
+        val minutes = Advanced.playedMinutes(setup, state)
+        assertEquals(10.0, minutes, 1e-9)
+        val adv = Advanced.team(setup, Side.A, box.getValue(Side.A).total, box.getValue(Side.B).total, possessions, minutes)
         assertEquals(2, adv.possessions)
         assertEquals(2, adv.secondChancePoints)
         assertEquals(3, adv.pointsOffTurnovers)
@@ -223,11 +225,17 @@ class AnalysisTest {
         assertEquals(1.0, adv.orbPercent!!, 1e-9)
         // 攻撃時間: 10:00〜9:40 の 20 秒と、9:20〜9:10 の 10 秒
         assertEquals(ms(0, 15), adv.averagePossessionMillis)
-        // PACE: 2 回 ÷ 40 分 × 40
-        assertEquals(2.0, adv.pace!!, 1e-9)
-        val b = Advanced.team(setup, Side.B, box.getValue(Side.B).total, box.getValue(Side.A).total, possessions, 1)
+        // PACE: 2 回 ÷ 進んだ 10 分 × 40
+        assertEquals(8.0, adv.pace!!, 1e-9)
+        val b = Advanced.team(setup, Side.B, box.getValue(Side.B).total, box.getValue(Side.A).total, possessions, minutes)
         assertNull(b.efg)
         assertEquals(1.0, b.toRate!!, 1e-9)
+    }
+
+    @Test
+    fun playedMinutesFollowTheClockDuringTheGame() {
+        val running = listOf(PeriodStart(1, ms(10, 0)), PeriodEnd(1, 0), PeriodStart(2, ms(10, 0)), Shot(2, ms(4, 0), Side.A, "a4", ShotKind.TWO, made = true))
+        assertEquals(16.0, Advanced.playedMinutes(setup, GameEngine.replay(setup, running)), 1e-9)
     }
 
     @Test

@@ -379,9 +379,14 @@ object Advanced {
 
     private fun ratio(a: Number, b: Number): Double? = if (b.toDouble() != 0.0) a.toDouble() / b.toDouble() else null
 
-    /** 試合の分（規定の 4 Q と、行った OT） */
-    fun gameMinutes(setup: GameSetup, periods: Int): Double =
-        (1..maxOf(periods, Period.QUARTERS)).sumOf { setup.rules.periodMillis(it) } / 60_000.0
+    /** ここまでに進んだ試合の分（終わったピリオドと、今のピリオドの経過。試合が終われば行った OT まで） */
+    fun playedMinutes(setup: GameSetup, state: com.ttech.basketscore.game.GameState): Double {
+        val p = state.period.coerceAtLeast(1)
+        val before = (1 until p).sumOf { setup.rules.periodMillis(it) }
+        val clock = state.lastClockMillis
+        val current = if (state.periodRunning && clock != null) setup.rules.periodMillis(p) - clock else setup.rules.periodMillis(p)
+        return (before + current.coerceAtLeast(0)) / 60_000.0
+    }
 
     fun team(
         setup: GameSetup,
@@ -389,7 +394,8 @@ object Advanced {
         own: StatLine,
         opponent: StatLine,
         possessions: List<Possession>,
-        periods: Int,
+        /** ここまでに進んだ試合の分（[playedMinutes]） */
+        minutes: Double,
     ): TeamAdvanced {
         val mine = possessions.filter { it.side == side }
         val count = mine.size
@@ -402,7 +408,7 @@ object Advanced {
             possessions = count,
             estimatedPossessions = estimated,
             averagePossessionMillis = if (durations.isNotEmpty()) durations.sum() / durations.size else null,
-            pace = ratio(poss, gameMinutes(setup, periods))?.times(regulation),
+            pace = ratio(poss, minutes)?.times(regulation),
             ppp = ratio(own.pts, poss),
             efg = ratio(own.fgm + 0.5 * own.tpm, own.fga),
             ts = ratio(own.pts, 2 * (own.fga + 0.44 * own.fta)),
@@ -481,8 +487,9 @@ data class GameAnalysis(
             val periods = (1..maxOf(state.period, 1)).toList()
             val quarterBox = periods.associateWith { p -> BoxScore.compute(setup, events, state, clock, setOf(p)) }
             val possessions = Possessions.compute(events)
+            val minutes = Advanced.playedMinutes(setup, state)
             val advanced = Side.entries.associateWith { side ->
-                Advanced.team(setup, side, box.getValue(side).total, box.getValue(side.other).total, possessions, state.period)
+                Advanced.team(setup, side, box.getValue(side).total, box.getValue(side.other).total, possessions, minutes)
             }
             val scores = Flow.scores(events)
             return GameAnalysis(

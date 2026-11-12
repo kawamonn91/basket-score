@@ -111,7 +111,7 @@ private sealed interface Dialog {
 
 /** 記録の画面（docs/design.md の 3.3。いまは公式の記録） */
 @Composable
-fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit, onOpenScoresheet: () -> Unit) {
+fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit, onOpenScoresheet: () -> Unit, onOpenAnalysis: () -> Unit) {
     val graph = LocalContext.current.graph
     val vm = viewModel(key = "record-$gameId") { RecordViewModel(graph.games, gameId, graph.clocks) }
     val game by vm.game.collectAsStateWithLifecycle()
@@ -162,6 +162,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                 onUndo = vm::undo,
                 onList = onOpenPlayByPlay,
                 onSheet = onOpenScoresheet,
+                onAnalysis = onOpenAnalysis,
                 onFlipArrow = vm::flipArrow,
                 onEndPeriod = vm::endPeriod,
                 onEndGame = { dialog = Dialog.EndGame },
@@ -203,6 +204,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                     onFoul = { sel -> dialog = Dialog.Foul(sel.side, sel.playerId) },
                     onCancel = { vm.selected = null },
                     onList = onOpenPlayByPlay,
+                    onAnalysis = onOpenAnalysis,
                     onHome = onBack,
                     modifier = Modifier.weight(1.3f),
                 )
@@ -371,6 +373,7 @@ private fun Scoreboard(
     onUndo: () -> Unit,
     onList: () -> Unit,
     onSheet: () -> Unit,
+    onAnalysis: () -> Unit,
     onFlipArrow: () -> Unit,
     onEndPeriod: () -> Unit,
     onEndGame: () -> Unit,
@@ -421,6 +424,7 @@ private fun Scoreboard(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("スコアシート（PDF・印刷）") }, onClick = { menu = false; onSheet() })
                     DropdownMenuItem(text = { Text("記録の一覧（Play by Play）") }, onClick = { menu = false; onList() })
+                    DropdownMenuItem(text = { Text("分析（ボックススコア・フロー・シュートチャートなど）") }, onClick = { menu = false; onAnalysis() })
                     DropdownMenuItem(
                         text = { Text(if (vm.showBox) "ボックススコアを隠す" else "ボックススコアを出す") },
                         onClick = { menu = false; vm.showBox = !vm.showBox },
@@ -633,6 +637,7 @@ private fun CenterPanel(
     onFoul: (Selection) -> Unit,
     onCancel: () -> Unit,
     onList: () -> Unit,
+    onAnalysis: () -> Unit,
     onHome: () -> Unit,
     modifier: Modifier,
 ) {
@@ -649,6 +654,7 @@ private fun CenterPanel(
                     Text("試合終了", style = MaterialTheme.typography.headlineMedium)
                     Text("${setup.teamA.name} ${state.a.score} - ${state.b.score} ${setup.teamB.name}", style = MaterialTheme.typography.titleLarge)
                     state.winner()?.let { Text("勝者: ${setup.team(it).name}") }
+                    Button(onClick = onAnalysis) { Text("分析を見る") }
                     OutlinedButton(onClick = onList) { Text("記録の一覧") }
                     OutlinedButton(onClick = onHome) { Text("ホームへ") }
                 }
