@@ -37,12 +37,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttech.basketscore.data.GameEntity
 import com.ttech.basketscore.data.GameStatus
+import androidx.compose.material3.AssistChip
 import com.ttech.basketscore.graph
+import com.ttech.basketscore.ui.analysis.AnalysisTab
 
 /** ホーム: 新しい試合・チーム・試合の一覧（docs/design.md の 3.1） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onNewGame: () -> Unit, onTeams: () -> Unit, onOpenGame: (Long) -> Unit) {
+fun HomeScreen(
+    onNewGame: () -> Unit,
+    onTeams: () -> Unit,
+    onOpenGame: (Long) -> Unit,
+    onOpenAnalysis: (Long, AnalysisTab) -> Unit,
+    onOpenScoresheet: (Long) -> Unit,
+) {
     val context = LocalContext.current
     val gamesFlow = remember { context.graph.games.observeGames() }
     val games by gamesFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -72,7 +80,12 @@ fun HomeScreen(onNewGame: () -> Unit, onTeams: () -> Unit, onOpenGame: (Long) ->
                     )
                     else -> LazyColumn(Modifier.fillMaxSize()) {
                         items(list, key = { it.id }) { game ->
-                            GameRow(game, onClick = { onOpenGame(game.id) })
+                            GameRow(
+                                game,
+                                onClick = { onOpenGame(game.id) },
+                                onAnalysis = { tab -> onOpenAnalysis(game.id, tab) },
+                                onScoresheet = { onOpenScoresheet(game.id) },
+                            )
                             HorizontalDivider()
                         }
                         item { Spacer(Modifier.padding(24.dp)) }
@@ -84,12 +97,24 @@ fun HomeScreen(onNewGame: () -> Unit, onTeams: () -> Unit, onOpenGame: (Long) ->
 }
 
 @Composable
-private fun GameRow(game: GameEntity, onClick: () -> Unit) {
+private fun GameRow(game: GameEntity, onClick: () -> Unit, onAnalysis: (AnalysisTab) -> Unit, onScoresheet: () -> Unit) {
     ListItem(
         leadingContent = { Icon(Icons.Outlined.SportsBasketball, contentDescription = null) },
         headlineContent = { Text("${game.teamAName}  ${game.scoreA} - ${game.scoreB}  ${game.teamBName}") },
         supportingContent = {
-            Text(listOf(game.date, game.competition).filter { it.isNotBlank() }.joinToString("  "))
+            Column {
+                Text(listOf(game.date, game.competition).filter { it.isNotBlank() }.joinToString("  "))
+                // 試合の一覧から直接開く（F-1005）
+                if (game.status != GameStatus.READY) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        AssistChip(onClick = { onAnalysis(AnalysisTab.FLOW) }, label = { Text("フロー") })
+                        AssistChip(onClick = onScoresheet, label = { Text("ランニングスコア") })
+                        AssistChip(onClick = { onAnalysis(AnalysisTab.BOX) }, label = { Text("ボックススコア") })
+                        AssistChip(onClick = { onAnalysis(AnalysisTab.SHOTS) }, label = { Text("シュートチャート") })
+                        AssistChip(onClick = { onAnalysis(AnalysisTab.RESULT) }, label = { Text("分析") })
+                    }
+                }
+            }
         },
         trailingContent = {
             Text(

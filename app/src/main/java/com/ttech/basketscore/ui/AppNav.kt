@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ttech.basketscore.ui.record.PlayByPlayScreen
+import com.ttech.basketscore.ui.analysis.AnalysisScreen
 import com.ttech.basketscore.ui.record.RecordScreen
 import com.ttech.basketscore.ui.record.ScoresheetScreen
 import com.ttech.basketscore.ui.setup.GameSetupScreen
@@ -23,6 +24,8 @@ fun AppNav() {
                 onNewGame = { nav.navigate("setup") },
                 onTeams = { nav.navigate("teams") },
                 onOpenGame = { nav.navigate("game/$it") },
+                onOpenAnalysis = { id, tab -> nav.navigate("game/$id/analysis?tab=${tab.ordinal}") },
+                onOpenScoresheet = { nav.navigate("game/$it/sheet") },
             )
         }
         composable("teams") {
@@ -49,6 +52,20 @@ fun AppNav() {
                 onBack = { nav.popBackStack("home", inclusive = false) },
                 onOpenPlayByPlay = { nav.navigate("game/$gameId/pbp") },
                 onOpenScoresheet = { nav.navigate("game/$gameId/sheet") },
+                onOpenAnalysis = { nav.navigate("game/$gameId/analysis?tab=0") },
+            )
+        }
+        composable(
+            "game/{gameId}/analysis?tab={tab}",
+            arguments = listOf(navArgument("gameId") { type = NavType.LongType }, navArgument("tab") { type = NavType.IntType; defaultValue = 0 }),
+        ) { entry ->
+            val gameId = entry.arguments?.getLong("gameId") ?: 0L
+            AnalysisScreen(
+                gameId = gameId,
+                initialTab = entry.arguments?.getInt("tab") ?: 0,
+                onBack = { nav.popBackStack() },
+                onOpenScoresheet = { nav.navigate("game/$gameId/sheet") },
+                onOpenPlayByPlay = { nav.navigate("game/$gameId/pbp") },
             )
         }
         composable("game/{gameId}/sheet", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
