@@ -7,14 +7,21 @@ import com.ttech.basketscore.rules.TeamFouls
 import com.ttech.basketscore.rules.Timeouts
 
 /** ファウルの欄の 1 つ（記号・フリースローの数・相殺・どのピリオドか（色）） */
-data class FoulMark(val code: FoulCode, val freeThrows: Int, val cancelled: Boolean, val period: Int) {
+data class FoulMark(
+    val code: FoulCode,
+    val freeThrows: Int,
+    val cancelled: Boolean,
+    val period: Int,
+    /** もとの出来事の並びの位置（スコアシートの欄から修正画面へ移るため。-1 は不明） */
+    val eventIndex: Int = -1,
+) {
     /** スコアシートに書く形（"P2"・"Tc"・"U2"） */
     val text: String
         get() = code.label + (if (freeThrows > 0) freeThrows.toString() else "") + (if (cancelled) "c" else "")
 }
 
 /** タイムアウトの欄の 1 つ */
-data class TimeoutMark(val period: Int, val remainingMillis: Long?, val sheetMinute: Int?)
+data class TimeoutMark(val period: Int, val remainingMillis: Long?, val sheetMinute: Int?, val eventIndex: Int = -1)
 
 /** ランニングスコアの 1 つ（[total] 点目に、背番号と印を書く） */
 data class ScoreMark(
@@ -24,6 +31,7 @@ data class ScoreMark(
     val playerNumber: String,
     val kind: ShotKind,
     val period: Int,
+    val eventIndex: Int = -1,
 )
 
 /** ピリオドの終わりの得点（ランニングスコアの太い○と線） */
