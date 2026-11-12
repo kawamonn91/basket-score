@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 画面は Compose（ui/theme/Theme.kt）で描く。ここは起動直後の窓の見た目だけ -->
+    <style name="Theme.BasketScore" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>
