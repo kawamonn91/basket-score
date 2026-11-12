@@ -1,9 +1,12 @@
 package com.ttech.basketscore.rules
 
+import kotlinx.serialization.Serializable
+
 /**
  * 大会の区分。規則の初期値は 2026-04-01 の JBA の TO マニュアルによる（docs/requirements.md の 5.2）。
  * U12 は入れない（2026-11-12 の決定）。
  */
+@Serializable
 enum class Category(val label: String) {
     GENERAL("一般・U18"),
     U15("U15"),
@@ -17,6 +20,7 @@ enum class Category(val label: String) {
 }
 
 /** 1 試合の規則。区分の初期値から、項目ごとに変えられる */
+@Serializable
 data class GameRules(
     val quarterSeconds: Int,
     val overtimeSeconds: Int,

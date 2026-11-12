@@ -14,8 +14,10 @@ T-tech Store で無料で配る予定（パッケージ名 `com.ttech.basketscor
 | 場所 | 中身 |
 | --- | --- |
 | `app/src/main/java/com/ttech/basketscore/rules/` | 試合の規則（大会の区分ごとの初期値、タイムアウトの欄に書く経過時間、L2M、残りのタイムアウト、チームファウル） |
+| `app/src/main/java/com/ttech/basketscore/game/` | 試合の設定、出来事（得点・ファウル・交代など）の型、出来事の並びから試合の状態を作る計算（`GameEngine`）、JSON |
 | `app/src/main/java/com/ttech/basketscore/ui/` | 画面（Compose） |
 | `docs/requirements.md` | 要件定義書 |
+| `docs/design.md` | 1.0 の設計書（データ・画面・作る順番） |
 | `docs/ci.md` | CI・CD と、新しい版を出す手順 |
 
 公式のスコアシートの様式（PDF）は、作成者の様式なのでリポジトリに入れない。手元の `reference/` に置く（Git の対象外）。
