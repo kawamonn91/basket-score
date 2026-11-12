@@ -31,6 +31,16 @@ object GameEngine {
         val disqualified = mutableSetOf<String>()
         var coachDisqualified = false
 
+        /** 出場時間（F-504）: 終わった分の合計と、いまコートにいる選手が入ったときの時計の残り */
+        val playingMillis = mutableMapOf<String, Long>()
+        val onCourtSince = mutableMapOf<String, Long>()
+
+        /** コートから出た（交代・失格・ピリオドの終わり）。入ったときと出たときの時計の差を足す */
+        fun leave(playerId: String, clock: Long?) {
+            val since = onCourtSince.remove(playerId) ?: return
+            if (clock != null) playingMillis.merge(playerId, (since - clock).coerceAtLeast(0), Long::plus)
+        }
+
         fun build() = TeamState(
             side = side,
             score = score,
@@ -44,6 +54,8 @@ object GameEngine {
             fouledOut = fouledOut.toSet(),
             disqualified = disqualified.toSet(),
             coachDisqualified = coachDisqualified,
+            playingMillis = playingMillis.toMap(),
+            onCourtSince = onCourtSince.toMap(),
         )
     }
 
@@ -78,10 +90,15 @@ object GameEngine {
                     period = event.period
                     periodRunning = true
                     inL2m = false
+                    if (setup.useClock) {
+                        val start = event.clockMillis ?: setup.rules.periodMillis(event.period)
+                        listOf(a, b).forEach { t -> t.onCourt.forEach { t.onCourtSince[it] = start } }
+                    }
                     // 第2Q 以降と OT の初めのスローインは、アローの向きで決めて反転する（JBA の TO マニュアル）
                     if (event.period >= 2) arrow = arrow?.other
                 }
                 is PeriodEnd -> {
+                    if (periodRunning) leaveAll(event.clockMillis ?: 0)
                     periodRunning = false
                     periodEnds += PeriodEndMark(event.period, a.score, b.score)
                     if (event.period >= Period.QUARTERS) reachedQ4L2m = true
@@ -100,6 +117,7 @@ object GameEngine {
                 is Deflection -> checkOnCourt(index, event.side, event.playerId)
                 is PossessionChange -> Unit
                 is GameEnd -> {
+                    if (periodRunning) leaveAll(event.clockMillis ?: 0)
                     finished = true
                     periodRunning = false
                     endedAt = event.endedAt
@@ -114,6 +132,10 @@ object GameEngine {
                 if (period == Period.QUARTERS) alerts += Alert.EnteredLastTwoMinutes
             }
             if (period > Period.QUARTERS || (period == Period.QUARTERS && inL2m)) reachedQ4L2m = true
+        }
+
+        fun leaveAll(clock: Long) {
+            listOf(a, b).forEach { t -> t.onCourtSince.keys.toList().forEach { t.leave(it, clock) } }
         }
 
         fun checkOnCourt(index: Int, side: Side, playerId: String) {
@@ -164,6 +186,7 @@ object GameEngine {
                     } else if (playerId !in team.disqualified && playerDisqualified(marks)) {
                         team.disqualified += playerId
                         team.onCourt.remove(playerId)
+                        team.leave(playerId, foul.clockMillis)
                         alerts += Alert.Disqualified(foul.side, playerId)
                     } else if (playerId !in team.fouledOut && marks.size >= setup.rules.playerFoulLimit) {
                         team.fouledOut += playerId
@@ -223,6 +246,8 @@ object GameEngine {
                 }
                 team.onCourt[outIndex] = change.inId
                 team.entered.putIfAbsent(change.inId, sub.period)
+                team.leave(change.outId, sub.clockMillis)
+                if (setup.useClock && periodRunning && sub.clockMillis != null) team.onCourtSince[change.inId] = sub.clockMillis
             }
         }
 

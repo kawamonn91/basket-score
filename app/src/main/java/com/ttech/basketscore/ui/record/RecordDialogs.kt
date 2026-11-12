@@ -268,6 +268,12 @@ fun EditEventDialog(setup: GameSetup, stored: StoredEvent, onDismiss: () -> Unit
                     }
                     else -> Unit
                 }
+                // 時刻（時計を使う試合。F-502）
+                if (setup.useClock && e !is com.ttech.basketscore.game.ArrowSet) {
+                    val max = setup.rules.periodMillis(e.period)
+                    Text("時刻（${com.ttech.basketscore.game.ClockFormat.at(e.period, e.clockMillis)}）")
+                    ClockAdjuster(e.clockMillis ?: max, max) { event = com.ttech.basketscore.game.ClockRules.stamp(e, it) }
+                }
                 HorizontalDivider()
                 if (confirmDelete) {
                     Text("この記録を消します。よろしいですか", color = MaterialTheme.colorScheme.error)
