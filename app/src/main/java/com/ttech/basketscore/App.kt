@@ -3,6 +3,8 @@ package com.ttech.basketscore
 import android.app.Application
 import android.content.Context
 import com.ttech.basketscore.data.AppDatabase
+import com.ttech.basketscore.data.BackupPrefs
+import com.ttech.basketscore.data.BackupRepository
 import com.ttech.basketscore.data.ClockStore
 import com.ttech.basketscore.data.GameRepository
 import com.ttech.basketscore.data.TeamRepository
@@ -17,6 +19,8 @@ class AppGraph(context: Context) {
     val teams = TeamRepository(db)
     val games = GameRepository(db)
     val clocks = ClockStore(context)
+    val backup = BackupRepository(db)
+    val backupPrefs = BackupPrefs(context)
 }
 
 val Context.graph: AppGraph get() = (applicationContext as App).graph

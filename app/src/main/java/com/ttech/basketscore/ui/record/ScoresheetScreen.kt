@@ -106,7 +106,8 @@ fun ScoresheetScreen(gameId: Long, onBack: () -> Unit) {
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.widthIn(max = 1000.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp)) {
                 Text(
-                    "欄を押すと、その記録を直せます（ランニングスコア・ファウル・タイムアウト）",
+                    if (vm.locked) "確定した試合です（記録を直すときは、記録の画面のメニューから確定を解除します）"
+                    else "欄を押すと、その記録を直せます（ランニングスコア・ファウル・タイムアウト）",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -117,7 +118,7 @@ fun ScoresheetScreen(gameId: Long, onBack: () -> Unit) {
                         }
                     }
                 }
-                SheetCanvas(sheet, page.coerceAtMost(sheet.pages - 1)) { index -> editing = g.events.getOrNull(index) }
+                SheetCanvas(sheet, page.coerceAtMost(sheet.pages - 1)) { index -> if (!vm.locked) editing = g.events.getOrNull(index) }
             }
         }
         editing?.let { stored ->

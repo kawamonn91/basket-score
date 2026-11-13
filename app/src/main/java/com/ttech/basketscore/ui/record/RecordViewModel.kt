@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ttech.basketscore.data.ClockStore
 import com.ttech.basketscore.data.GameRepository
+import com.ttech.basketscore.data.GameStatus
 import com.ttech.basketscore.data.LoadedGame
 import com.ttech.basketscore.data.StoredEvent
 import com.ttech.basketscore.game.Alert
@@ -265,8 +266,27 @@ class RecordViewModel(
 
     // --- 記録 ---
 
+    // --- 確定（F-1003） ---
+
+    /** 確定した試合か（記録を変えられない） */
+    val locked: Boolean get() = current?.entity?.status == GameStatus.LOCKED
+
+    private fun refuseIfLocked(): Boolean {
+        if (!locked) return false
+        banner = listOf(LOCKED_MESSAGE)
+        return true
+    }
+
+    /** 試合を確定する / 解除する */
+    fun setLocked(lock: Boolean) {
+        val g = current ?: return
+        if (lock && !g.state.finished) return
+        viewModelScope.launch { repo.setLocked(gameId, lock) }
+    }
+
     /** 出来事を足す。時刻を付け、時計を自動で止める / 動かし、足したあとの状態から知らせることを出す */
     fun add(vararg events: GameEvent) {
+        if (refuseIfLocked()) return
         val g = current ?: return
         val stamped = events.map { stamp(g, it) }
         val before = g.events.map { it.event }
@@ -359,21 +379,25 @@ class RecordViewModel(
 
     /** 直前の出来事を消す */
     fun undo() {
+        if (refuseIfLocked()) return
         val last = current?.events?.lastOrNull() ?: return
         banner = emptyList()
         viewModelScope.launch { repo.deleteEvent(last) }
     }
 
     fun delete(stored: StoredEvent) {
+        if (refuseIfLocked()) return
         viewModelScope.launch { repo.deleteEvent(stored) }
     }
 
     fun update(stored: StoredEvent, event: GameEvent) {
+        if (refuseIfLocked()) return
         viewModelScope.launch { repo.updateEvent(stored, event) }
     }
 
     /** 試合中に背番号だけで選手を足す（F-317）。足せなければ理由を返す */
     fun addPlayer(side: Side, number: String): String? {
+        if (locked) return LOCKED_MESSAGE
         val g = current ?: return null
         return when (val result = Recording.addPlayer(g.setup, side, number)) {
             is Recording.AddPlayerResult.Added -> {
@@ -385,6 +409,8 @@ class RecordViewModel(
     }
 
     companion object {
+        const val LOCKED_MESSAGE = "確定した試合です。直すときは、メニューから確定を解除します"
+
         fun alertText(setup: GameSetup, alert: Alert): String = when (alert) {
             is Alert.FifthFoul -> "${EventText.teamLabel(setup, alert.side)} ${EventText.number(setup, alert.side, alert.playerId)} が 5 個目のファウル（審判に知らせる）"
             is Alert.Disqualified -> "${EventText.teamLabel(setup, alert.side)} " +

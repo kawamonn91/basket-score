@@ -78,6 +78,15 @@ interface GameDao {
     @Query("DELETE FROM game WHERE id = :id")
     suspend fun deleteGame(id: Long)
 
+    @Query("DELETE FROM game WHERE id IN (:ids)")
+    suspend fun deleteGames(ids: List<Long>)
+
+    @Query("DELETE FROM edit_history WHERE game_id IN (:ids)")
+    suspend fun deleteHistoryOf(ids: List<Long>)
+
+    @Query("SELECT MIN(created_at) FROM game")
+    suspend fun oldestGameAt(): Long?
+
     @Query("SELECT * FROM game_event WHERE game_id = :gameId ORDER BY seq")
     fun observeEvents(gameId: Long): Flow<List<GameEventEntity>>
 

@@ -74,7 +74,7 @@ fun PlayByPlayScreen(gameId: Long, onBack: () -> Unit) {
                     val bad = EventText.hasUnknownPlayer(e) || g.state.warnings.containsKey(index)
                     val side = EventText.sideOf(e)
                     Row(
-                        Modifier.fillMaxWidth().clickable { editing = stored }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { if (!vm.locked) editing = stored }.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${index + 1}", modifier = Modifier.width(48.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
