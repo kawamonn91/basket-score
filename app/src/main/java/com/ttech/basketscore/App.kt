@@ -6,6 +6,7 @@ import com.ttech.basketscore.data.AppDatabase
 import com.ttech.basketscore.data.BackupPrefs
 import com.ttech.basketscore.data.BackupRepository
 import com.ttech.basketscore.data.ClockStore
+import com.ttech.basketscore.data.FolderRepository
 import com.ttech.basketscore.data.GameRepository
 import com.ttech.basketscore.data.TeamRepository
 
@@ -17,6 +18,7 @@ class App : Application() {
 class AppGraph(context: Context) {
     val db: AppDatabase = AppDatabase.create(context)
     val teams = TeamRepository(db)
+    val folders = FolderRepository(db)
     val games = GameRepository(db)
     val clocks = ClockStore(context)
     val backup = BackupRepository(db)

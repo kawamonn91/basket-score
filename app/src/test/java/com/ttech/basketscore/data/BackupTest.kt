@@ -2,6 +2,7 @@ package com.ttech.basketscore.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +25,36 @@ class BackupTest {
         assertEquals(games, Backup.games(file))
         assertEquals(events, Backup.events(file))
         assertEquals(history, Backup.history(file))
+    }
+
+    @Test
+    fun backupKeepsFoldersAndTheGamesInThem() {
+        val folders = listOf(FolderEntity(7, "秋季リーグ", createdAt = 40))
+        val games = listOf(
+            GameEntity(3, GameStatus.FINISHED, "{}", 20, 30, "2026-11-13", "秋季リーグ", "Stars", "Moons", 70, 65, folderId = 7),
+            GameEntity(4, GameStatus.READY, "{}", 21, 31, "2026-11-14", "", "Stars", "Suns", folderId = null),
+        )
+        val file = Backup.decode(Backup.encode(Backup.from(emptyList(), emptyList(), games, emptyList(), emptyList(), now = 99, folders = folders)))
+        assertEquals(BackupFile.FORMAT, file.format)
+        assertEquals(folders, Backup.folders(file))
+        assertEquals(games, Backup.games(file))
+    }
+
+    @Test
+    fun formerBackupsAreReadWithAllGamesUnfiled() {
+        // 形式 1（大会のフォルダが無かったころ）のファイル
+        val old = "{\"app\":\"basket-score\",\"format\":1,\"createdAt\":1,\"teams\":[],\"players\":[],\"events\":[]," +
+            "\"games\":[{\"id\":1,\"status\":\"FINISHED\",\"setupJson\":\"{}\",\"createdAt\":1,\"updatedAt\":1,\"date\":\"2026-11-12\",\"competition\":\"\",\"teamAName\":\"A\",\"teamBName\":\"B\"}]}"
+        val file = Backup.decode(old)
+        assertEquals(emptyList<FolderEntity>(), Backup.folders(file))
+        assertNull(Backup.games(file).single().folderId)
+    }
+
+    @Test
+    fun gamesPointingToMissingFoldersBecomeUnfiled() {
+        val games = listOf(GameEntity(3, GameStatus.FINISHED, "{}", 20, 30, "2026-11-13", "", "A", "B", folderId = 99))
+        val file = Backup.decode(Backup.encode(Backup.from(emptyList(), emptyList(), games, emptyList(), emptyList(), now = 1)))
+        assertNull(Backup.games(file).single().folderId)
     }
 
     @Test

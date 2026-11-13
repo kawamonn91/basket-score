@@ -59,6 +59,34 @@ abstract class TeamDao {
 }
 
 @Dao
+abstract class FolderDao {
+    @Query("SELECT * FROM folder ORDER BY created_at DESC")
+    abstract fun observeFolders(): Flow<List<FolderEntity>>
+
+    @Insert
+    abstract suspend fun insert(folder: FolderEntity): Long
+
+    @Update
+    abstract suspend fun update(folder: FolderEntity)
+
+    @Query("DELETE FROM folder WHERE id = :id")
+    abstract suspend fun deleteRow(id: Long)
+
+    @Query("UPDATE game SET folder_id = NULL WHERE folder_id = :id")
+    abstract suspend fun releaseGames(id: Long)
+
+    @Query("UPDATE game SET folder_id = :folderId WHERE id IN (:gameIds)")
+    abstract suspend fun moveGames(gameIds: List<Long>, folderId: Long?)
+
+    /** フォルダを消す。中の試合は消さずに未分類へ戻す */
+    @Transaction
+    open suspend fun delete(id: Long) {
+        releaseGames(id)
+        deleteRow(id)
+    }
+}
+
+@Dao
 interface GameDao {
     @Query("SELECT * FROM game ORDER BY date DESC, created_at DESC")
     fun observeGames(): Flow<List<GameEntity>>
