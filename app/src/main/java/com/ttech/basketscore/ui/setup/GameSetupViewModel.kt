@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
+import com.ttech.basketscore.data.FolderEntity
 import com.ttech.basketscore.data.GameRepository
 import com.ttech.basketscore.data.TeamRepository
 import com.ttech.basketscore.data.TeamWithPlayers
@@ -42,11 +43,20 @@ data class EntryDraft(
 }
 
 /** 試合の準備（docs/design.md の 3.2） */
-class GameSetupViewModel(private val games: GameRepository, private val teams: TeamRepository) : ViewModel() {
+class GameSetupViewModel(
+    private val games: GameRepository,
+    private val teams: TeamRepository,
+    /** ホームで開いていた大会のフォルダ（はじめから選んでおく） */
+    private val initialFolderId: Long?,
+) : ViewModel() {
 
     var step by mutableStateOf(0)
 
     // 1. 試合の情報
+    /** 試合を入れる大会のフォルダ（null なら未分類） */
+    var folderId by mutableStateOf<Long?>(null)
+        private set
+    private var initialFolderApplied = false
     var competition by mutableStateOf("")
     var date by mutableStateOf(LocalDate.now().toString())
     var startTime by mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
@@ -86,6 +96,24 @@ class GameSetupViewModel(private val games: GameRepository, private val teams: T
     var detail by mutableStateOf(DetailLevel.OFFICIAL)
     var statsA by mutableStateOf(true)
     var statsB by mutableStateOf(true)
+
+    /** ホームで開いていた大会を選んでおく（フォルダの一覧を読んだあとに 1 度だけ） */
+    fun applyInitialFolder(folders: List<FolderEntity>) {
+        if (initialFolderApplied) return
+        initialFolderApplied = true
+        if (initialFolderId != null && folders.any { it.id == initialFolderId }) chooseFolder(initialFolderId, folders)
+    }
+
+    /**
+     * 大会のフォルダを選ぶ。大会名が空か、前に選んでいたフォルダの名前のままなら、新しいフォルダの名前にする
+     * （自分で書き換えた大会名は変えない）
+     */
+    fun chooseFolder(id: Long?, folders: List<FolderEntity>) {
+        val before = folders.firstOrNull { it.id == folderId }?.name
+        folderId = id
+        val after = folders.firstOrNull { it.id == id }?.name
+        if (competition.isBlank() || competition == before) competition = after ?: ""
+    }
 
     fun entries(side: Side): SnapshotStateList<EntryDraft> = if (side == Side.A) entriesA else entriesB
 
@@ -210,5 +238,7 @@ class GameSetupViewModel(private val games: GameRepository, private val teams: T
         )
     }
 
-    suspend fun create(teams: Map<Long, TeamWithPlayers>): Long? = buildSetup(teams)?.let { games.create(it) }
+    /** 試合を作る。選んだフォルダが消えていたら未分類にする */
+    suspend fun create(teams: Map<Long, TeamWithPlayers>, folders: List<FolderEntity>): Long? =
+        buildSetup(teams)?.let { games.create(it, folderId?.takeIf { id -> folders.any { f -> f.id == id } }) }
 }

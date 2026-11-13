@@ -17,15 +17,17 @@ class Converters {
 }
 
 @Database(
-    entities = [TeamEntity::class, PlayerEntity::class, GameEntity::class, GameEventEntity::class, EditHistoryEntity::class],
-    version = 2,
+    entities = [TeamEntity::class, PlayerEntity::class, FolderEntity::class, GameEntity::class, GameEventEntity::class, EditHistoryEntity::class],
+    version = 3,
     exportSchema = true,
     // 2: 選手の練習用の背番号と既定のスターター（2026-11-12）
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    // 3: 大会のフォルダ（folder の表と game.folder_id。2026-11-13）
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun teamDao(): TeamDao
+    abstract fun folderDao(): FolderDao
     abstract fun gameDao(): GameDao
     abstract fun historyDao(): HistoryDao
     abstract fun backupDao(): BackupDao

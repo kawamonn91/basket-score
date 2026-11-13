@@ -52,8 +52,16 @@ enum class GameStatus(val label: String) {
     LOCKED("確定"),
 }
 
+/** 大会のフォルダ。試合をまとめて管理する（1 試合は 1 つのフォルダに入る。入れなければ未分類） */
+@Entity(tableName = "folder")
+data class FolderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+)
+
 /** 試合。設定は JSON（GameSetup）で持ち、一覧に出す項目は写しを持つ */
-@Entity(tableName = "game")
+@Entity(tableName = "game", indices = [Index("folder_id")])
 data class GameEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val status: GameStatus,
@@ -67,6 +75,11 @@ data class GameEntity(
     @ColumnInfo(name = "team_b_name") val teamBName: String,
     @ColumnInfo(name = "score_a") val scoreA: Int = 0,
     @ColumnInfo(name = "score_b") val scoreB: Int = 0,
+    /**
+     * 大会のフォルダ（null なら未分類）。外部キーは付けない（付けると表を作り直す移行になり、
+     * game を消すと出来事まで消える恐れがある）。フォルダを消すときは、先にここを null に戻す
+     */
+    @ColumnInfo(name = "folder_id") val folderId: Long? = null,
 )
 
 /** 試合の出来事 1 件。[seq] は並びの順番（差し込みのために間を空けて振る） */

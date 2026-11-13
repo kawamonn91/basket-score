@@ -10,8 +10,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * すべてのデータのバックアップ（F-1004）。チーム・選手・試合・出来事・更新履歴を 1 つの JSON ファイルにする。
- * 復元は、今のデータをすべて置き換える
+ * すべてのデータのバックアップ（F-1004）。チーム・選手・大会のフォルダ・試合・出来事・更新履歴を 1 つの JSON ファイルにする。
+ * 復元は、今のデータをすべて置き換える。
+ * 形式 2 で大会のフォルダ（[folders] と [BackupGame.folderId]）を足した。形式 1 のファイルは、全試合を未分類として読む
  */
 @Serializable
 data class BackupFile(
@@ -23,12 +24,20 @@ data class BackupFile(
     val games: List<BackupGame>,
     val events: List<BackupEvent>,
     val history: List<BackupHistory> = emptyList(),
+    val folders: List<BackupFolder> = emptyList(),
 ) {
     companion object {
         const val APP = "basket-score"
-        const val FORMAT = 1
+        const val FORMAT = 2
     }
 }
+
+@Serializable
+data class BackupFolder(
+    val id: Long,
+    val name: String,
+    val createdAt: Long,
+)
 
 @Serializable
 data class BackupTeam(
@@ -70,6 +79,7 @@ data class BackupGame(
     val teamBName: String,
     val scoreA: Int = 0,
     val scoreB: Int = 0,
+    val folderId: Long? = null,
 )
 
 @Serializable
@@ -114,12 +124,21 @@ object Backup {
         return file
     }
 
-    fun from(teams: List<TeamEntity>, players: List<PlayerEntity>, games: List<GameEntity>, events: List<GameEventEntity>, history: List<EditHistoryEntity>, now: Long) =
+    fun from(
+        teams: List<TeamEntity>,
+        players: List<PlayerEntity>,
+        games: List<GameEntity>,
+        events: List<GameEventEntity>,
+        history: List<EditHistoryEntity>,
+        now: Long,
+        folders: List<FolderEntity> = emptyList(),
+    ) =
         BackupFile(
             createdAt = now,
+            folders = folders.map { BackupFolder(it.id, it.name, it.createdAt) },
             teams = teams.map { BackupTeam(it.id, it.name, it.shortName, it.color, it.headCoachName, it.headCoachLicense, it.assistantCoachName, it.assistantCoachLicense, it.createdAt) },
             players = players.map { BackupPlayer(it.id, it.teamId, it.number, it.name, it.practiceNumber, it.defaultStarter, it.licenseNo, it.captain, it.position, it.sortOrder) },
-            games = games.map { BackupGame(it.id, it.status.name, it.setupJson, it.createdAt, it.updatedAt, it.date, it.competition, it.teamAName, it.teamBName, it.scoreA, it.scoreB) },
+            games = games.map { BackupGame(it.id, it.status.name, it.setupJson, it.createdAt, it.updatedAt, it.date, it.competition, it.teamAName, it.teamBName, it.scoreA, it.scoreB, it.folderId) },
             events = events.map { BackupEvent(it.id, it.gameId, it.seq, it.period, it.clockMillis, it.json, it.createdAt) },
             history = history.map { BackupHistory(it.id, it.gameId, it.at, it.action, it.target, it.before, it.after) },
         )
@@ -132,8 +151,17 @@ object Backup {
         PlayerEntity(it.id, it.teamId, it.number, it.name, it.practiceNumber, it.defaultStarter, it.licenseNo, it.captain, it.position, it.sortOrder)
     }
 
-    fun games(file: BackupFile) = file.games.map {
-        GameEntity(it.id, GameStatus.valueOf(it.status), it.setupJson, it.createdAt, it.updatedAt, it.date, it.competition, it.teamAName, it.teamBName, it.scoreA, it.scoreB)
+    fun folders(file: BackupFile) = file.folders.map { FolderEntity(it.id, it.name, it.createdAt) }
+
+    /** 試合。ファイルの中に無いフォルダを指していたら、未分類にする（どのフォルダからも見えなくなるため） */
+    fun games(file: BackupFile): List<GameEntity> {
+        val folderIds = file.folders.map { it.id }.toSet()
+        return file.games.map {
+            GameEntity(
+                it.id, GameStatus.valueOf(it.status), it.setupJson, it.createdAt, it.updatedAt, it.date, it.competition, it.teamAName, it.teamBName, it.scoreA, it.scoreB,
+                folderId = it.folderId?.takeIf { id -> id in folderIds },
+            )
+        }
     }
 
     fun events(file: BackupFile) = file.events.map { GameEventEntity(it.id, it.gameId, it.seq, it.period, it.clockMillis, it.json, it.createdAt) }
@@ -152,6 +180,9 @@ interface BackupDao {
     @Query("SELECT * FROM player")
     suspend fun players(): List<PlayerEntity>
 
+    @Query("SELECT * FROM folder")
+    suspend fun folders(): List<FolderEntity>
+
     @Query("SELECT * FROM game")
     suspend fun games(): List<GameEntity>
 
@@ -169,6 +200,12 @@ interface BackupDao {
 
     @Query("DELETE FROM team")
     suspend fun deleteTeams()
+
+    @Query("DELETE FROM folder")
+    suspend fun deleteFolders()
+
+    @Insert
+    suspend fun insertFolders(items: List<FolderEntity>)
 
     @Insert
     suspend fun insertTeams(items: List<TeamEntity>)
@@ -191,7 +228,7 @@ class BackupRepository(private val db: AppDatabase) {
     private val dao = db.backupDao()
 
     suspend fun export(now: Long = System.currentTimeMillis()): String = db.withTransaction {
-        Backup.encode(Backup.from(dao.teams(), dao.players(), dao.games(), dao.events(), dao.history(), now))
+        Backup.encode(Backup.from(dao.teams(), dao.players(), dao.games(), dao.events(), dao.history(), now, dao.folders()))
     }
 
     /** 今のデータをすべて消して、バックアップの中身に置き換える */
@@ -201,8 +238,10 @@ class BackupRepository(private val db: AppDatabase) {
             dao.deleteHistory()
             dao.deleteGames()
             dao.deleteTeams()
+            dao.deleteFolders()
             dao.insertTeams(Backup.teams(file))
             dao.insertPlayers(Backup.players(file))
+            dao.insertFolders(Backup.folders(file))
             dao.insertGames(Backup.games(file))
             dao.insertEvents(Backup.events(file))
             dao.insertHistory(Backup.history(file))

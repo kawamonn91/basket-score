@@ -18,7 +18,7 @@ T-tech Store で無料で配る（パッケージ名 `com.ttech.basketscore`。�
 | `app/src/main/java/com/ttech/basketscore/sheet/` | 公式のスコアシートの中身（欄への割り当て）・描き方・PDF・共有と印刷 |
 | `app/src/main/java/com/ttech/basketscore/stats/` | コートの寸法、ポゼッション、ボックススコア、分析（ラン・ラインナップ・時間帯・22 区域・期待値・種別・アドバンスド）、用語解説 |
 | `app/src/main/java/com/ttech/basketscore/report/` | 分析のグラフ（画面と PDF で共通）・分析の PDF・CSV |
-| `app/src/main/java/com/ttech/basketscore/data/` | Room（チーム・選手・試合・出来事・更新履歴）、時計の保存、バックアップと復元 |
+| `app/src/main/java/com/ttech/basketscore/data/` | Room（チーム・選手・大会のフォルダ・試合・出来事・更新履歴）、大会ごとのまとめ、時計の保存、バックアップと復元 |
 | `app/src/main/java/com/ttech/basketscore/ui/` | 画面（Compose）: ホーム・チーム・試合の準備・記録・スコアシート・記録の一覧・分析 |
 | `store/listing.md` | T-tech Store の掲載内容 |
 | `docs/requirements.md` | 要件定義書 |

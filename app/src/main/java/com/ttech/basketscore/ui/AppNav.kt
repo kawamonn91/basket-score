@@ -21,7 +21,7 @@ fun AppNav() {
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
-                onNewGame = { nav.navigate("setup") },
+                onNewGame = { folderId -> nav.navigate("setup?folder=${folderId ?: 0L}") },
                 onTeams = { nav.navigate("teams") },
                 onOpenGame = { nav.navigate("game/$it") },
                 onOpenAnalysis = { id, tab -> nav.navigate("game/$id/analysis?tab=${tab.ordinal}") },
@@ -38,8 +38,10 @@ fun AppNav() {
         composable("team/{teamId}", arguments = listOf(navArgument("teamId") { type = NavType.LongType })) { entry ->
             TeamEditScreen(teamId = entry.arguments?.getLong("teamId") ?: 0L, onDone = { nav.popBackStack() })
         }
-        composable("setup") {
+        // folder: ホームで開いていた大会のフォルダ（0 なら未分類）
+        composable("setup?folder={folder}", arguments = listOf(navArgument("folder") { type = NavType.LongType; defaultValue = 0L })) { entry ->
             GameSetupScreen(
+                initialFolderId = entry.arguments?.getLong("folder")?.takeIf { it > 0 },
                 onBack = { nav.popBackStack() },
                 onEditTeams = { nav.navigate("teams") },
                 onCreated = { gameId -> nav.navigate("game/$gameId") { popUpTo("home") } },

@@ -54,6 +54,20 @@ class TeamRepository(private val db: AppDatabase) {
         team.team.name + "：" + team.sortedPlayers.joinToString("、") { "#${it.number} ${it.name}" }
 }
 
+/** 大会のフォルダ */
+class FolderRepository(private val db: AppDatabase) {
+    private val dao = db.folderDao()
+
+    fun observeFolders(): Flow<List<FolderEntity>> = dao.observeFolders()
+
+    suspend fun create(name: String): Long = dao.insert(FolderEntity(name = name.trim(), createdAt = System.currentTimeMillis()))
+
+    suspend fun rename(folder: FolderEntity, name: String) = dao.update(folder.copy(name = name.trim()))
+
+    /** フォルダを消す。中の試合は消さずに未分類へ戻す */
+    suspend fun delete(id: Long) = dao.delete(id)
+}
+
 /** 試合の出来事 1 件（保存した行と、読み込んだ出来事） */
 data class StoredEvent(val entity: GameEventEntity, val event: GameEvent)
 
@@ -73,7 +87,8 @@ class GameRepository(private val db: AppDatabase) {
             game?.let { load(it, events) }
         }
 
-    suspend fun create(setup: GameSetup): Long {
+    /** 試合を作る。[folderId] は入れる大会のフォルダ（null なら未分類） */
+    suspend fun create(setup: GameSetup, folderId: Long? = null): Long {
         val now = System.currentTimeMillis()
         return dao.insertGame(
             GameEntity(
@@ -85,8 +100,17 @@ class GameRepository(private val db: AppDatabase) {
                 competition = setup.header.competition,
                 teamAName = setup.teamA.name,
                 teamBName = setup.teamB.name,
+                folderId = folderId,
             ),
         )
+    }
+
+    /**
+     * 試合を大会のフォルダに移す（null なら未分類へ）。記録の書き込み（[refresh] が行ごと書き直す）と
+     * 重ならないように、同じ鍵の中で行う
+     */
+    suspend fun moveGames(ids: List<Long>, folderId: Long?) = writes.withLock {
+        if (ids.isNotEmpty()) db.folderDao().moveGames(ids, folderId)
     }
 
     suspend fun delete(gameId: Long) = dao.deleteGame(gameId)

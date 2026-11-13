@@ -22,8 +22,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -42,6 +48,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ttech.basketscore.data.FolderEntity
 import com.ttech.basketscore.data.TeamWithPlayers
 import com.ttech.basketscore.game.DetailLevel
 import com.ttech.basketscore.game.GameType
@@ -61,6 +69,7 @@ import com.ttech.basketscore.game.RosterRules
 import com.ttech.basketscore.game.Side
 import com.ttech.basketscore.graph
 import com.ttech.basketscore.rules.Category
+import com.ttech.basketscore.ui.FolderNameDialog
 import com.ttech.basketscore.ui.common.Problems
 import com.ttech.basketscore.ui.common.Section
 import com.ttech.basketscore.ui.common.toColor
@@ -71,14 +80,20 @@ private val STEP_TITLES = listOf("試合の情報", "チーム", "出場登録�
 /** 試合の準備（4 段。F-201〜F-206） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameSetupScreen(onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Long) -> Unit) {
+fun GameSetupScreen(initialFolderId: Long?, onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Long) -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel { GameSetupViewModel(graph.games, graph.teams) }
+    val vm = viewModel { GameSetupViewModel(graph.games, graph.teams, initialFolderId) }
     val teamsFlow = remember { graph.teams.observeTeams() }
     val teamList by teamsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val teams = remember(teamList) { teamList.associateBy { it.team.id } }
+    val foldersFlow = remember { graph.folders.observeFolders() }
+    val folderList by foldersFlow.collectAsStateWithLifecycle(initialValue = null)
+    val folders = folderList.orEmpty()
     val scope = rememberCoroutineScope()
     var problems by remember { mutableStateOf(emptyList<String>()) }
+
+    // ホームで開いていた大会を選んでおく（大会名も入れる）
+    LaunchedEffect(folderList) { folderList?.let(vm::applyInitialFolder) }
 
     fun goBack() {
         problems = emptyList()
@@ -105,7 +120,7 @@ fun GameSetupScreen(onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Lon
                         if (vm.step < 3) {
                             vm.step++
                         } else {
-                            scope.launch { vm.create(teams)?.let(onCreated) }
+                            scope.launch { vm.create(teams, folders)?.let(onCreated) }
                         }
                     }) { Text(if (vm.step < 3) "次へ" else "試合を作る") }
                 }
@@ -119,7 +134,16 @@ fun GameSetupScreen(onBack: () -> Unit, onEditTeams: () -> Unit, onCreated: (Lon
             ) {
                 Problems(problems)
                 when (vm.step) {
-                    0 -> InfoStep(vm)
+                    0 -> InfoStep(
+                        vm,
+                        folders,
+                        onCreateFolder = { name ->
+                            scope.launch {
+                                val id = graph.folders.create(name)
+                                vm.chooseFolder(id, folders + FolderEntity(id, name.trim(), System.currentTimeMillis()))
+                            }
+                        },
+                    )
                     1 -> TeamStep(vm, teamList, onEditTeams)
                     2 -> RosterStep(vm, onSaveDefault = { side -> scope.launch { vm.saveDefaultStarters(side) } })
                     else -> RulesStep(vm, teams)
@@ -135,7 +159,10 @@ private fun Field(value: String, onChange: (String) -> Unit, label: String, modi
 }
 
 @Composable
-private fun InfoStep(vm: GameSetupViewModel) {
+private fun InfoStep(vm: GameSetupViewModel, folders: List<FolderEntity>, onCreateFolder: (String) -> Unit) {
+    Section("大会のフォルダ") {
+        FolderPicker(vm, folders, onCreateFolder)
+    }
     Section("試合の種類") {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             GameType.entries.forEachIndexed { i, t ->
@@ -178,6 +205,58 @@ private fun InfoStep(vm: GameSetupViewModel) {
     }
     Section("メモ") {
         OutlinedTextField(vm.memo, { vm.memo = it }, label = { Text("メモ（任意）") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/** 試合を入れる大会のフォルダを選ぶ（その場で作ることもできる） */
+@Composable
+private fun FolderPicker(vm: GameSetupViewModel, folders: List<FolderEntity>, onCreateFolder: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
+    val current = folders.firstOrNull { it.id == vm.folderId }
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            OutlinedButton(onClick = { open = true }) {
+                Icon(if (current != null) Icons.Outlined.Folder else Icons.Outlined.Inbox, contentDescription = null)
+                Text(current?.name ?: "未分類（フォルダに入れない）", modifier = Modifier.padding(horizontal = 8.dp))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text("未分類（フォルダに入れない）") },
+                    leadingIcon = { Icon(Icons.Outlined.Inbox, contentDescription = null) },
+                    onClick = { open = false; vm.chooseFolder(null, folders) },
+                )
+                folders.forEach { f ->
+                    DropdownMenuItem(
+                        text = { Text(f.name) },
+                        leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                        onClick = { open = false; vm.chooseFolder(f.id, folders) },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("新しい大会を作る") },
+                    leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
+                    onClick = { open = false; creating = true },
+                )
+            }
+        }
+        Text(
+            "ホームの試合の一覧で、大会ごとにまとめて見られます。大会名が空なら、フォルダの名前を入れます",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+    }
+    if (creating) {
+        FolderNameDialog(
+            title = "新しい大会",
+            initial = "",
+            folders = folders,
+            onDismiss = { creating = false },
+            onConfirm = { name -> creating = false; onCreateFolder(name) },
+        )
     }
 }
 
