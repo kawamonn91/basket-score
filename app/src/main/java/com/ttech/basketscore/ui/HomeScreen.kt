@@ -130,8 +130,10 @@ fun HomeScreen(
     val currentFolder = folderList.firstOrNull { it.id == view }
     val folderNames = remember(folderList) { folderList.associate { it.id to it.name } }
 
-    // 見ていた大会が無くなったら（消した・バックアップから戻した）、すべての試合に戻す
-    LaunchedEffect(folders, view) {
+    // 見ていた大会が無くなったら（消した・バックアップから戻した）、すべての試合に戻す。
+    // 大会の一覧が変わったときだけ確かめる（作った直後は、新しい大会が一覧に届く前に view が変わるので、
+    // view の変化でも確かめると、作った大会を開けずに「すべての試合」に戻ってしまう）
+    LaunchedEffect(folders) {
         val list = folders ?: return@LaunchedEffect
         if (view != Folders.ALL && view != Folders.UNFILED && list.none { it.id == view }) view = Folders.ALL
     }
