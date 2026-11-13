@@ -91,6 +91,22 @@ class GameRepository(private val db: AppDatabase) {
 
     suspend fun delete(gameId: Long) = dao.deleteGame(gameId)
 
+    /** 試合をまとめて消す（F-1006）。出来事と更新履歴も消える */
+    suspend fun deleteGames(ids: List<Long>) = writes.withLock {
+        if (ids.isEmpty()) return@withLock
+        dao.deleteHistoryOf(ids)
+        dao.deleteGames(ids)
+    }
+
+    suspend fun oldestGameAt(): Long? = dao.oldestGameAt()
+
+    /** 試合を確定する / 解除する（F-1003）。確定した試合は記録を変えられない */
+    suspend fun setLocked(gameId: Long, locked: Boolean) = writes.withLock {
+        val game = dao.game(gameId) ?: return@withLock
+        dao.updateGame(game.copy(status = if (locked) GameStatus.LOCKED else GameStatus.FINISHED, updatedAt = System.currentTimeMillis()))
+        refresh(gameId)
+    }
+
     /** 出来事を最後に足す */
     suspend fun addEvent(gameId: Long, event: GameEvent): Long = writes.withLock {
         val seq = (dao.maxSeq(gameId) ?: 0L) + SEQ_STEP
@@ -150,7 +166,7 @@ class GameRepository(private val db: AppDatabase) {
         val game = dao.game(gameId) ?: return
         val loaded = load(game, dao.events(gameId))
         val status = when {
-            game.status == GameStatus.LOCKED -> GameStatus.LOCKED
+            game.status == GameStatus.LOCKED && loaded.state.finished -> GameStatus.LOCKED
             loaded.state.finished -> GameStatus.FINISHED
             loaded.events.isEmpty() -> GameStatus.READY
             else -> GameStatus.LIVE

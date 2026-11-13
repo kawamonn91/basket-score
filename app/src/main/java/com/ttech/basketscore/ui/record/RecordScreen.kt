@@ -163,6 +163,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                 onList = onOpenPlayByPlay,
                 onSheet = onOpenScoresheet,
                 onAnalysis = onOpenAnalysis,
+                onLock = vm::setLocked,
                 onFlipArrow = vm::flipArrow,
                 onEndPeriod = vm::endPeriod,
                 onEndGame = { dialog = Dialog.EndGame },
@@ -191,7 +192,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(left, null) },
                     onAddPlayer = { dialog = Dialog.AddPlayer(left) },
-                    onEdit = { dialog = Dialog.Edit(it) },
+                    onEdit = { if (vm.locked) message = RecordViewModel.LOCKED_MESSAGE else dialog = Dialog.Edit(it) },
                     modifier = Modifier.weight(1f),
                 )
                 CenterPanel(
@@ -218,7 +219,7 @@ fun RecordScreen(gameId: Long, onBack: () -> Unit, onOpenPlayByPlay: () -> Unit,
                     onSubstitution = { dialog = Dialog.Substitution },
                     onCoachFoul = { dialog = Dialog.Foul(right, null) },
                     onAddPlayer = { dialog = Dialog.AddPlayer(right) },
-                    onEdit = { dialog = Dialog.Edit(it) },
+                    onEdit = { if (vm.locked) message = RecordViewModel.LOCKED_MESSAGE else dialog = Dialog.Edit(it) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -374,11 +375,13 @@ private fun Scoreboard(
     onList: () -> Unit,
     onSheet: () -> Unit,
     onAnalysis: () -> Unit,
+    onLock: (Boolean) -> Unit,
     onFlipArrow: () -> Unit,
     onEndPeriod: () -> Unit,
     onEndGame: () -> Unit,
 ) {
     val setup = g.setup
+    val locked = g.entity.status == com.ttech.basketscore.data.GameStatus.LOCKED
     val state = g.state
     var menu by remember { mutableStateOf(false) }
     Surface(tonalElevation = 3.dp) {
@@ -416,7 +419,7 @@ private fun Scoreboard(
                 onFlipPossession = { possession?.let { vm.stats.possession(it.side.other) } },
             )
             ScoreSide(setup, state, left.other, clockSecond, Modifier.weight(1f), alignEnd = true)
-            IconButton(onClick = onUndo, enabled = g.events.isNotEmpty()) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "元に戻す") }
+            IconButton(onClick = onUndo, enabled = g.events.isNotEmpty() && !locked) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "元に戻す") }
             IconButton(onClick = onSheet) { Icon(Icons.Filled.Description, contentDescription = "スコアシート") }
             IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "記録の一覧") }
             Box {
@@ -425,6 +428,11 @@ private fun Scoreboard(
                     DropdownMenuItem(text = { Text("スコアシート（PDF・印刷）") }, onClick = { menu = false; onSheet() })
                     DropdownMenuItem(text = { Text("記録の一覧（Play by Play）") }, onClick = { menu = false; onList() })
                     DropdownMenuItem(text = { Text("分析（ボックススコア・フロー・シュートチャートなど）") }, onClick = { menu = false; onAnalysis() })
+                    if (locked) {
+                        DropdownMenuItem(text = { Text("確定を解除する（記録を直せるようにする）") }, onClick = { menu = false; onLock(false) })
+                    } else {
+                        DropdownMenuItem(text = { Text("試合を確定する（鍵をかける）") }, enabled = state.finished, onClick = { menu = false; onLock(true) })
+                    }
                     DropdownMenuItem(
                         text = { Text(if (vm.showBox) "ボックススコアを隠す" else "ボックススコアを出す") },
                         onClick = { menu = false; vm.showBox = !vm.showBox },
@@ -652,6 +660,9 @@ private fun CenterPanel(
             when {
                 state.finished -> {
                     Text("試合終了", style = MaterialTheme.typography.headlineMedium)
+                    if (g.entity.status == com.ttech.basketscore.data.GameStatus.LOCKED) {
+                        Text("確定済み（記録に鍵をかけています。直すときはメニューから解除）", color = MaterialTheme.colorScheme.primary)
+                    }
                     Text("${setup.teamA.name} ${state.a.score} - ${state.b.score} ${setup.teamB.name}", style = MaterialTheme.typography.titleLarge)
                     state.winner()?.let { Text("勝者: ${setup.team(it).name}") }
                     Button(onClick = onAnalysis) { Text("分析を見る") }
