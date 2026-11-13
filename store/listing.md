@@ -1,11 +1,11 @@
 # T-tech Store の掲載内容
 
-`appstore/web/scripts/publish-app.mjs` に渡す内容。スクリーンショットはエミュレーター（タブレットの横向き）で使用中の画面を撮って `add-screenshot.mjs` で載せる（docs/ci.md の手順 4）。
+`appstore/web/scripts/publish-app.mjs` に渡す内容。アイコンは `store/icon.svg`（`set-app-icon.mjs`）、スクリーンショットはエミュレーター（タブレットの横向き）で使用中の画面を撮って `add-screenshot.mjs` で載せる（docs/ci.md の手順 4）。
 
 - 表示名: Basket Score
 - スラッグ: basket-score
 - パッケージ名: com.ttech.basketscore
-- カテゴリ: 公開のときに、ストアにあるカテゴリから選ぶ（スポーツが無ければツール）
+- カテゴリ: hobby（趣味・ホビー。ストアにスポーツのカテゴリが無いため）
 - 価格: 無料
 
 ## 短い説明
